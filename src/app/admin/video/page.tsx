@@ -341,6 +341,18 @@ export default function AdminVideoPage() {
   if (channelLoading && !isConnected) {
     return (
       <>
+        <style>{`
+          :root { --primary: #E8A838; --primary-light: #F5C76B; --primary-dark: #C48A2A; --bg: #0F0F0F; --surface: #1A1A1A; --surface-elevated: #242424; --surface-card: #1E1E1E; --surface-hover: #2A2A2A; --text-primary: #FFFFFF; --text-secondary: #A0A0A0; --text-tertiary: #6B6B6B; --border: #2A2A2A; --error: #FF6B6B; --success: #4ADE80; --info: #38BDF8; --overlay: rgba(0,0,0,0.92); --gradient-start: #E8A838; --gradient-end: #D4762A; --gradient-red: #EF4444; --gradient-green: #22C55E; --shadow-soft: 0 4px 20px rgba(232,168,56,0.15); --radius-sm: 10px; --radius-md: 14px; --radius-lg: 18px; --radius-xl: 22px; --radius-full: 50%; }
+          * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; }
+          html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text-primary); }
+          .skeleton-loading { background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hover) 50%, var(--surface) 75%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; border-radius: var(--radius-md); }
+          .skeleton-line { height: 14px; width: 100%; margin-bottom: 8px; }
+          .skeleton-line.w60 { width: 60%; }
+          .skeleton-line.w40 { width: 40%; }
+          .skeleton-line.w80 { width: 80%; }
+          .skeleton-line.h24 { height: 24px; }
+          @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        `}</style>
         <ToastBridge />
         <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "40px 28px", background: "var(--bg)" }}>
           <div className="skeleton-loading" style={{ width: 80, height: 80, borderRadius: 24, marginBottom: 8 }}></div>

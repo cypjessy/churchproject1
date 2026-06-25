@@ -25,7 +25,7 @@ export function useMusicControls({ isPlaying, title, artist, albumArt, onPlay, o
 
         if (!initialized.current) {
           controls.create({
-            track: title || "FaithStream Radio",
+            track: title || "Kingdom Seekers Church Radio",
             artist: artist || "Kingdom Seekers Church",
             cover: albumArt || "",
             isPlaying,
@@ -38,7 +38,7 @@ export function useMusicControls({ isPlaying, title, artist, albumArt, onPlay, o
         } else {
           controls.updateIsPlaying(isPlaying);
           controls.updateTrack({
-            track: title || "FaithStream Radio",
+            track: title || "Kingdom Seekers Church Radio",
             artist: artist || "Kingdom Seekers Church",
             cover: albumArt || "",
           });

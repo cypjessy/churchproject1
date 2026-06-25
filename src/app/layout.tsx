@@ -4,13 +4,13 @@ import { AuthProvider } from "@/lib/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FaithStream",
+  title: "Kingdom Seekers Church",
   description:
-    "FaithStream connects you to your church's live radio, sermons, videos, and community — anywhere, anytime.",
+    "Kingdom Seekers Church connects you to live radio, sermons, videos, and community — anywhere, anytime.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "FaithStream",
+    title: "Kingdom Seekers Church",
   },
   icons: {
     icon: "/favicon.ico",

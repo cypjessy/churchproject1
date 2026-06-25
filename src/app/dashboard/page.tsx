@@ -292,7 +292,7 @@ export default function DashboardPage() {
   const imageViewer = useImageLightbox();
   const ytLive = useYouTubeLive();
 
-  const currentTrackTitle = npData?.nowPlaying?.song?.title || "FaithStream Radio";
+  const currentTrackTitle = npData?.nowPlaying?.song?.title || "Kingdom Seekers Church Radio";
   const currentTrackArtist = npData?.nowPlaying?.song?.artist || "Kingdom Seekers Church";
   const currentAlbumArt = npData?.nowPlaying?.song?.albumArt || "";
 

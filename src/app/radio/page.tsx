@@ -1057,7 +1057,7 @@ export default function RadioPage() {
                 </div>
 
                 <div className="about-footer">
-                  Powered by <strong>FaithStream</strong> · v1.0.0
+                  Powered by <strong>Kingdom Seekers Church</strong> · v1.0.0
                 </div>
               </div>
             )}

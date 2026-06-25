@@ -9,7 +9,7 @@ import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
 import PhoneLoginModal from "@/components/auth/PhoneLoginModal";
 import CountryPickerModal from "@/components/auth/CountryPickerModal";
 import RegisterModal from "@/components/auth/RegisterModal";
-import BiometricPrompt from "@/components/auth/BiometricPrompt";
+
 
 export default function LoginPage() {
   useEffect(() => {
@@ -24,10 +24,20 @@ export default function LoginPage() {
         await StatusBar.setBackgroundColor({ color: "#0F0F0F" });
 
         const showListener = await Keyboard.addListener("keyboardWillShow", (info) => {
-          document.body.style.paddingBottom = info.keyboardHeight + "px";
+          const loginScreen = document.querySelector(".login-screen") as HTMLElement | null;
+          if (loginScreen) {
+            loginScreen.style.paddingBottom = info.keyboardHeight + "px";
+          }
+          // Scroll focused input into view so it isn't hidden by the keyboard
+          setTimeout(() => {
+            (document.activeElement as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 150);
         });
         const hideListener = await Keyboard.addListener("keyboardWillHide", () => {
-          document.body.style.paddingBottom = "0";
+          const loginScreen = document.querySelector(".login-screen") as HTMLElement | null;
+          if (loginScreen) {
+            loginScreen.style.paddingBottom = "0";
+          }
         });
         const backListener = await App.addListener("backButton", () => {
           App.exitApp().catch(() => {});
@@ -42,10 +52,19 @@ export default function LoginPage() {
         // Fallback for web — use the old custom event approach
         function handleKeyboardShow(e: Event) {
           const evt = e as CustomEvent;
-          document.body.style.paddingBottom = (evt as any).keyboardHeight + "px";
+          const loginScreen = document.querySelector(".login-screen") as HTMLElement | null;
+          if (loginScreen) {
+            loginScreen.style.paddingBottom = (evt as any).keyboardHeight + "px";
+          }
+          setTimeout(() => {
+            (document.activeElement as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 150);
         }
         function handleKeyboardHide() {
-          document.body.style.paddingBottom = "0";
+          const loginScreen = document.querySelector(".login-screen") as HTMLElement | null;
+          if (loginScreen) {
+            loginScreen.style.paddingBottom = "0";
+          }
         }
         window.addEventListener("keyboardWillShow", handleKeyboardShow);
         window.addEventListener("keyboardWillHide", handleKeyboardHide);
@@ -429,6 +448,45 @@ export default function LoginPage() {
 
         .btn-primary.loading .btn-loader { opacity: 1; }
 
+        .btn-biometric {
+            width: 100%;
+            padding: 16px;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 16px;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.2s ease;
+            position: relative;
+            font-family: inherit;
+        }
+        .btn-biometric:active { background: var(--surface-elevated); transform: scale(0.97); }
+        .btn-biometric:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-biometric i { font-size: 20px; color: var(--primary); }
+        .btn-biometric .btn-text { transition: opacity 0.2s ease; }
+        .btn-biometric.loading .btn-text { opacity: 0; }
+        .btn-biometric .btn-loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 22px;
+            height: 22px;
+            border: 2.5px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .btn-biometric.loading .btn-loader { opacity: 1; }
+
         .divider {
             display: flex;
             align-items: center;
@@ -618,7 +676,6 @@ export default function LoginPage() {
         <ForgotPasswordModal />
         <PhoneLoginModal />
         <CountryPickerModal />
-        <BiometricPrompt />
       </ToastProvider>
     </>
   );

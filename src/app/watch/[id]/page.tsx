@@ -457,7 +457,7 @@ export default function WatchVideoPage() {
                 <i className="fas fa-cross"></i>
               </div>
               <div className="w-channel-info">
-                <div className="w-channel-name">FaithStream</div>
+                <div className="w-channel-name">Kingdom Seekers Church</div>
                 <div className="w-channel-sub">{formatCount(allVideos.length)} videos</div>
               </div>
               {seriesName && (

@@ -18,12 +18,14 @@ export default function LoginForm() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [hasBiometric, setHasBiometric] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   function showToast(title: string, message: string, type: string, duration = 3000) {
     window.dispatchEvent(new CustomEvent("show-toast", { detail: { title, message, type, duration } }));
   }
 
-  // Restore saved email and attempt biometric auto-login
+  // Restore saved email on mount and check if biometric credentials exist
   useEffect(() => {
     (async () => {
       try {
@@ -32,47 +34,60 @@ export default function LoginForm() {
         if (savedEmail.value) {
           setEmail(savedEmail.value);
         }
+
+        // Check if user has previously enabled biometric login (but don't auto-trigger)
+        const biometricEnabled = await Preferences.get({ key: "biometric_enabled" });
+        if (biometricEnabled.value === "true") {
+          setHasBiometric(true);
+        }
       } catch {}
     })();
-
-    (async () => {
-      try {
-        const { NativeBiometric } = await import("capacitor-native-biometric");
-        const { Preferences } = await import("@capacitor/preferences");
-        const biometricEnabled = await Preferences.get({ key: "biometric_enabled" });
-        if (biometricEnabled.value !== "true") return;
-
-        const available = await NativeBiometric.isAvailable();
-        if (!available) return;
-
-        const storedCreds = await NativeBiometric.getCredentials({ server: "faithstream-auth" });
-        if (!storedCreds?.username || !storedCreds?.password) return;
-
-        await NativeBiometric.verifyIdentity({ reason: "Sign in to FaithStream", title: "Biometric Sign In" });
-
-        setIsLoading(true);
-        const result = await signInWithEmailAndPassword(auth, storedCreds.username, storedCreds.password);
-        const firebaseUser = result.user;
-        setUser(firebaseUser);
-
-        const userDocRef = doc(db, "users", firebaseUser.uid);
-        const userSnap = await getDoc(userDocRef);
-
-        if (userSnap.exists()) {
-          const userData = userSnap.data() as any;
-          setUserDoc(userData);
-          setChurchConfig(churchConfig);
-          showToast("Welcome Back!", `Signed in as ${userData.display_name || storedCreds.username}`, "success", 2500);
-          setTimeout(() => {
-            if (userData.role === "admin") router.push("/admin");
-            else router.push("/dashboard");
-          }, 500);
-        }
-      } catch {
-        setIsLoading(false);
-      }
-    })();
   }, []);
+
+  async function handleBiometricLogin() {
+    setBiometricLoading(true);
+    try {
+      const { NativeBiometric } = await import("capacitor-native-biometric");
+      const available = await NativeBiometric.isAvailable();
+      if (!available) {
+        showToast("Not Available", "Biometrics are not available on this device", "error");
+        setBiometricLoading(false);
+        return;
+      }
+
+      const storedCreds = await NativeBiometric.getCredentials({ server: "kingdom-seekers-auth" });
+      if (!storedCreds?.username || !storedCreds?.password) {
+        showToast("No Credentials", "Please sign in manually first to set up biometrics", "info");
+        setHasBiometric(false);
+        setBiometricLoading(false);
+        return;
+      }
+
+      await NativeBiometric.verifyIdentity({ reason: "Sign in to Kingdom Seekers Church", title: "Biometric Sign In" });
+
+      setIsLoading(true);
+      const result = await signInWithEmailAndPassword(auth, storedCreds.username, storedCreds.password);
+      const firebaseUser = result.user;
+      setUser(firebaseUser);
+
+      const userDocRef = doc(db, "users", firebaseUser.uid);
+      const userSnap = await getDoc(userDocRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as any;
+        setUserDoc(userData);
+        setChurchConfig(churchConfig);
+        showToast("Welcome Back!", `Signed in as ${userData.display_name || storedCreds.username}`, "success", 2500);
+        setTimeout(() => {
+          if (userData.role === "admin") router.push("/admin");
+          else router.push("/dashboard");
+        }, 500);
+      }
+    } catch {
+      // User cancelled or biometric failed — silently reset
+      setBiometricLoading(false);
+    }
+  }
 
   async function handleLogin(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -104,7 +119,7 @@ export default function LoginForm() {
         setUserDoc(userData);
         setChurchConfig(churchConfig);
 
-        // Save email preference + biometric credentials
+        // Save email preference
         try {
           const { Preferences } = await import("@capacitor/preferences");
           if (rememberMe) {
@@ -112,9 +127,6 @@ export default function LoginForm() {
           } else {
             await Preferences.remove({ key: "saved_email" });
           }
-
-          const { NativeBiometric } = await import("capacitor-native-biometric");
-          await NativeBiometric.setCredentials({ server: "faithstream-auth", username: email, password });
         } catch {}
 
         await hapticSuccess();
@@ -267,6 +279,19 @@ export default function LoginForm() {
           <span className="btn-text">Sign In</span>
           <span className="btn-loader"></span>
         </button>
+
+        {hasBiometric && (
+          <button
+            type="button"
+            className={`btn-biometric${biometricLoading ? " loading" : ""}`}
+            onClick={handleBiometricLogin}
+            disabled={isLoading || biometricLoading}
+          >
+            <i className="fas fa-fingerprint"></i>
+            <span className="btn-text">{biometricLoading ? "Verifying..." : "Sign in with Fingerprint"}</span>
+            <span className="btn-loader"></span>
+          </button>
+        )}
 
         <div className="divider">
           <span>or continue with</span>

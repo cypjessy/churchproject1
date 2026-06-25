@@ -77,7 +77,7 @@ export default function RegisterModal() {
       }
 
       closeModal();
-      showToast("Account Created!", `Welcome to FaithStream, ${name}! Check your email to verify your account.`, "success", 4000);
+      showToast("Account Created!", `Welcome to Kingdom Seekers Church, ${name}! Check your email to verify your account.`, "success", 4000);
       setTimeout(() => router.push("/dashboard"), 800);
     } catch (err: any) {
       const code = err.code;

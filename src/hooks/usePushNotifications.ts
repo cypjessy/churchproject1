@@ -47,7 +47,7 @@ export function usePushNotifications() {
 
         PushNotifications.addListener("pushNotificationReceived", (notification) => {
           const data = notification.data as PushNotificationData;
-          const title = notification.title || data?.title || "FaithStream";
+          const title = notification.title || data?.title || "Kingdom Seekers Church";
           const body = notification.body || data?.body || "";
           window.dispatchEvent(
             new CustomEvent("show-toast", {

@@ -14,9 +14,9 @@ const tabs: NavTab[] = [
   { tab: "dashboard", icon: "fa-chart-line", label: "Dashboard" },
   { tab: "content", icon: "fa-photo-film", label: "Content" },
   { tab: "members", icon: "fa-users", label: "Members", showBadge: true },
-  { tab: "accounts", icon: "fa-user-shield", label: "Accounts" },
   { tab: "radio", icon: "fa-tower-broadcast", label: "Radio" },
   { tab: "video", icon: "fa-video", label: "Video" },
+  { tab: "accounts", icon: "fa-user-shield", label: "Accounts" },
 ];
 
 const tabRoutes: Record<string, string> = {

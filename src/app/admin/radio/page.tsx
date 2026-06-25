@@ -64,7 +64,7 @@ const AVAILABLE_EVENTS = [
 const defaultSettings = {
   stationName: "Kingdom Seekers Radio",
   streamUrl: "https://azuracast.histoview.co.ke/radio/8000/kingdom_seekers.mp3",
-  publicPageUrl: "https://faithstream.app/radio/grace",
+  publicPageUrl: "https://kingdomseekers.app/radio/grace",
   autoDJEnabled: true,
   maxListeners: 500,
   defaultBitrate: "128",
@@ -4128,7 +4128,7 @@ export default function AdminRadioPage() {
           <div className="radio-header-logo"><i className="fas fa-tower-broadcast"></i></div>
           <div className="radio-header-info">
             <div className="radio-header-name">Kingdom Seekers Radio</div>
-            <div className="radio-header-sub">FaithStream Radio Station</div>
+            <div className="radio-header-sub">Kingdom Seekers Church Radio Station</div>
           </div>
           <div className="radio-header-right">
             <div className={`on-air-badge ${isLive ? "live" : "off"}`}>
