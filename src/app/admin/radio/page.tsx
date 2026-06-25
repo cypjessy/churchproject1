@@ -28,6 +28,7 @@ import {
   getQueue as apiGetQueue,
   getStationSourceInfo,
 } from "@/lib/azuracast";
+import { hapticSuccess } from "@/lib/haptics";
 import type { Streamer, Playlist, StationFile, QueueItem, StationSourceInfo } from "@/lib/azuracast";
 
 // ========== REFERENCE DATA ==========
@@ -237,6 +238,7 @@ export default function AdminRadioPage() {
         publicPageVisible: settings.publicPageVisible,
       });
       setSettingsSuccess(true);
+      await hapticSuccess();
       setTimeout(() => setSettingsSuccess(false), 3000);
     } catch {
       setSettingsError("Failed to save settings");
@@ -581,10 +583,15 @@ export default function AdminRadioPage() {
               </div>
               <button
                 className={`broadcast-ctrl-btn ${autoDJ ? "stop" : "start"}`}
-                onClick={() => {
+                onClick={async () => {
                   const newAutoDJ = !autoDJ;
                   setAutoDJ(newAutoDJ);
-                  toggleAutoDJ().catch(() => setAutoDJ(!newAutoDJ));
+                  try {
+                    await toggleAutoDJ();
+                    await hapticSuccess();
+                  } catch {
+                    setAutoDJ(!newAutoDJ);
+                  }
                 }}
               >
                 <i className={`fas ${autoDJ ? "fa-pause" : "fa-play"}`}></i>
@@ -721,6 +728,7 @@ export default function AdminRadioPage() {
                           try {
                             const updated = await apiTogglePlaylist(pl.id);
                             setPcPlaylists((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                            await hapticSuccess();
                           } catch {}
                           setPcActionLoading(null);
                         }}
@@ -762,6 +770,7 @@ export default function AdminRadioPage() {
                           }
                         }
                         setPcActivePlaylist(pl.id);
+                        await hapticSuccess();
                         setPcActionLoading(null);
                       }}
                       disabled={pcActivePlaylist === pl.id || pcActionLoading !== null}
@@ -810,6 +819,7 @@ export default function AdminRadioPage() {
                         window.dispatchEvent(new CustomEvent("show-toast", {
                           detail: { title: "Playing", message: f.title, type: "success", duration: 2000 },
                         }));
+                        await hapticSuccess();
                       } catch {}
                       setPcActionLoading(null);
                     }}
@@ -1013,6 +1023,7 @@ export default function AdminRadioPage() {
           detail: { title: "Metadata Saved", message: `"${editTitle}" updated successfully`, type: "success", duration: 2500 },
         })
       );
+      await hapticSuccess();
       setEditingFile(null);
       setMediaActionLoading(false);
     };
@@ -1034,6 +1045,7 @@ export default function AdminRadioPage() {
           detail: { title: "File Deleted", message: "Track removed from media library", type: "success", duration: 2500 },
         })
       );
+      await hapticSuccess();
       setShowMediaActions(null);
       setMediaActionLoading(false);
     };
@@ -1052,6 +1064,7 @@ export default function AdminRadioPage() {
           detail: { title: "Files Deleted", message: `${selectedFileIds.size} tracks removed`, type: "success", duration: 2500 },
         })
       );
+      await hapticSuccess();
       setSelectedFileIds(new Set());
       setMediaActionLoading(false);
     };
@@ -1085,6 +1098,7 @@ export default function AdminRadioPage() {
           detail: { title: "Added to Playlist", message: `${selectedFileIds.size} tracks added to "${pl?.name || ""}"`, type: "success", duration: 2500 },
         })
       );
+      await hapticSuccess();
       setPlaylistPickerOpen(false);
       setSelectedFileIds(new Set());
       setMediaActionLoading(false);
@@ -1112,6 +1126,7 @@ export default function AdminRadioPage() {
             detail: { title: "Upload Complete", message: `${count} file${count > 1 ? "s" : ""} uploaded`, type: "success", duration: 3000 },
           })
         );
+        await hapticSuccess();
         return;
       }
       // Fallback: simulate upload with progress (for drag-drop without real files)
@@ -1133,6 +1148,7 @@ export default function AdminRadioPage() {
             detail: { title: "Upload Complete", message: `"${name}" added to media library`, type: "success", duration: 3000 },
           })
         );
+        await hapticSuccess();
       }, 3000);
     };
 
@@ -1420,6 +1436,7 @@ export default function AdminRadioPage() {
         setPlForm({ name: "", type: "standard", order: "shuffle", weight: 10 });
         setPlSchedule({ days: [], startTime: "09:00", endTime: "17:00" });
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Playlist Created", message: `"${newPl.name}" created successfully`, type: "success", duration: 2500 } }));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to create playlist — try again", type: "error", duration: 3000 } }));
       }
@@ -1443,6 +1460,7 @@ export default function AdminRadioPage() {
         setShowEditPlModal(false);
         setEditingPlId(null);
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Changes Saved", message: "Playlist updated", type: "success", duration: 2500 } }));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to update playlist", type: "error", duration: 3000 } }));
       }
@@ -1455,6 +1473,7 @@ export default function AdminRadioPage() {
       try {
         const updated = await apiTogglePlaylist(id);
         setPlaylists(playlists.map((p) => p.id === id ? updated : p));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to toggle playlist", type: "error", duration: 3000 } }));
       }
@@ -1469,6 +1488,7 @@ export default function AdminRadioPage() {
         setPlaylists(playlists.filter((p) => p.id !== id));
         if (selectedPlId === id) setSelectedPlId(null);
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Playlist Deleted", message: "Playlist removed", type: "success", duration: 2500 } }));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to delete playlist", type: "error", duration: 3000 } }));
       }
@@ -2088,6 +2108,7 @@ export default function AdminRadioPage() {
         setShowAddDJ(false);
         setDjForm({ displayName: "", username: "", password: "" });
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "DJ Added", message: `"${newDJ.displayName}" has been added`, type: "success", duration: 2500 } }));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to create DJ account", type: "error", duration: 3000 } }));
       }
@@ -2100,6 +2121,7 @@ export default function AdminRadioPage() {
       await apiDeleteStreamer(id).catch(() => {});
       setDjList(djList.filter((d) => d.id !== id));
       window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "DJ Removed", message: "Account deleted", type: "info", duration: 2500 } }));
+      await hapticSuccess();
       setDjActionLoading(false);
     };
 
@@ -2112,6 +2134,7 @@ export default function AdminRadioPage() {
         setEditingDJ(null);
         setDjForm({ displayName: "", username: "", password: "" });
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "DJ Updated", message: "Credentials saved", type: "success", duration: 2500 } }));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to update DJ account", type: "error", duration: 3000 } }));
       }
@@ -2543,6 +2566,7 @@ export default function AdminRadioPage() {
       try {
         const updated = await apiToggleWebhook(id);
         setWebhooks(webhooks.map((w) => w.id === id ? updated : w));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to toggle webhook", type: "error", duration: 2500 } }));
       }
@@ -2554,6 +2578,7 @@ export default function AdminRadioPage() {
       await apiDeleteWebhook(id).catch(() => {});
       setWebhooks(webhooks.filter((w) => w.id !== id));
       window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Webhook Deleted", message: "Webhook removed", type: "info", duration: 2500 } }));
+      await hapticSuccess();
       setWhActionLoading(false);
     };
 
@@ -2570,6 +2595,7 @@ export default function AdminRadioPage() {
         setShowAddWebhook(false);
         setWhForm({ url: "", secretKey: "", events: [] });
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Webhook Added", message: "New endpoint configured", type: "success", duration: 2500 } }));
+        await hapticSuccess();
       } catch {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to create webhook", type: "error", duration: 2500 } }));
       }

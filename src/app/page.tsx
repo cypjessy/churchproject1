@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { hapticSuccess, hapticError } from "@/lib/haptics";
 import { ToastProvider } from "@/components/ui/Toast";
 import SplashScreen from "@/components/auth/SplashScreen";
 import LoginForm from "@/components/auth/LoginForm";

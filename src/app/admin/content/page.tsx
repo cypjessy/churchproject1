@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
+import { hapticSuccess } from "@/lib/haptics";
 import { formatBytes } from "@/lib/bunny";
 import {
   getGalleryPhotos, addGalleryPhoto, updateGalleryPhoto, deleteGalleryPhoto,
@@ -270,6 +271,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Photo Updated", message: `"${editTitle}" changes saved`, type: "success", duration: 2500 },
       }));
+      await hapticSuccess();
       setEditPhoto(null);
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
@@ -327,6 +329,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: editBanner ? "Banner Updated" : "Banner Created", message: `"${bannerTitle}" saved`, type: "success", duration: 2500 },
       }));
+      await hapticSuccess();
       setShowBannerModal(false);
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
@@ -361,6 +364,7 @@ export default function AdminContentPage() {
         window.dispatchEvent(new CustomEvent("show-toast", {
           detail: { title: "Deleted", message: `${targets.length} photos deleted permanently`, type: "success", duration: 3000 },
         }));
+        await hapticSuccess();
       } else if (type === "banners" && deleteTargetId) {
         const item = banners.find((b) => b.id === deleteTargetId);
         if (item?.storagePath) {
@@ -375,6 +379,7 @@ export default function AdminContentPage() {
         window.dispatchEvent(new CustomEvent("show-toast", {
           detail: { title: "Deleted", message: `Banner deleted`, type: "success", duration: 3000 },
         }));
+        await hapticSuccess();
       }
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
@@ -406,6 +411,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Reordered", message: "Banner order updated", type: "success", duration: 2000 },
       }));
+      await hapticSuccess();
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Error", message: "Failed to save banner order", type: "error", duration: 3000 },
@@ -454,6 +460,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: editAlbum ? "Album Updated" : "Album Created", message: `"${albumTitle}" saved`, type: "success", duration: 2500 },
       }));
+      await hapticSuccess();
       setShowAlbumModal(false);
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
@@ -472,6 +479,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Deleted", message: "Album deleted", type: "success", duration: 2500 },
       }));
+      await hapticSuccess();
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Error", message: "Failed to delete album", type: "error", duration: 3000 },
@@ -554,6 +562,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: editEntry ? "Entry Updated" : "Entry Created", message: `"${entryTitle}" saved`, type: "success", duration: 2500 },
       }));
+      await hapticSuccess();
       setShowEntryModal(false);
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
@@ -572,6 +581,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Deleted", message: "Entry deleted", type: "success", duration: 2500 },
       }));
+      await hapticSuccess();
     } catch {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Error", message: "Failed to delete entry", type: "error", duration: 3000 },
@@ -663,6 +673,7 @@ export default function AdminContentPage() {
     window.dispatchEvent(new CustomEvent("show-toast", {
       detail: { title: "Import Complete", message: `${completed} of ${total} photos imported`, type: "success", duration: 3000 },
     }));
+    await hapticSuccess();
   }
 
   async function handleUpload() {
@@ -696,6 +707,7 @@ export default function AdminContentPage() {
       window.dispatchEvent(new CustomEvent("show-toast", {
         detail: { title: "Upload Complete", message: `${completed} of ${uploadFiles.length} photos uploaded`, type: "success", duration: 3000 },
       }));
+      await hapticSuccess();
     }
     setShowUploadModal(false);
     setUploadFiles([]);
@@ -1545,6 +1557,7 @@ export default function AdminContentPage() {
                 await Promise.all(ids.map((id) => updateGalleryPhoto(id, { isFeatured: true })));
                 setGalleryPhotos((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, isFeatured: true } : p));
                 window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Featured", message: `${ids.length} photos marked as featured`, type: "success", duration: 2500 } }));
+                await hapticSuccess();
               } catch {
                 window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to feature photos", type: "error", duration: 3000 } }));
               }

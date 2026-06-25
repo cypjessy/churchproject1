@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
+import { hapticSuccess } from "@/lib/haptics";
 import type { Timestamp } from "firebase/firestore";
 import { getAdminUsers } from "@/lib/users";
 import type { UserProfile } from "@/lib/users";
@@ -47,6 +48,7 @@ export default function AdminAccountsPage() {
       }
       showToast("Link Copied", "Admin registration link copied to clipboard", "success", 2500);
     }
+    await hapticSuccess();
   };
 
   function formatDate(ts: number | Timestamp | undefined): string {

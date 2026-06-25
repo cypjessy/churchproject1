@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
+import { hapticSuccess } from "@/lib/haptics";
 import { getVideosPage, saveVideos, updateVideo, deleteVideo, getChannel, saveChannel, getSeries, createSeries, updateSeries, deleteSeries } from "@/lib/youtube";
 import type { YouTubeVideo, YouTubeChannel, YouTubeSeries } from "@/lib/youtube";
 import type { DocumentSnapshot } from "firebase/firestore";
@@ -167,6 +168,7 @@ export default function AdminVideoPage() {
       setIsConnected(true);
       setLastSynced("Just now");
       showToast("YouTube Connected", `Channel "${data.channel.name}" connected with ${data.videos.length} videos`, "success", 4000);
+      await hapticSuccess();
     } catch (e) {
       showToast("Connection Failed", e instanceof Error ? e.message : "Unknown error", "error", 4000);
     } finally {
@@ -194,6 +196,7 @@ export default function AdminVideoPage() {
       setVideos(data.videos);
       setLastSynced("Just now");
       showToast("Sync Complete", `Synced ${data.videos.length} videos`, "success", 3000);
+      await hapticSuccess();
     } catch (e) {
       showToast("Sync Failed", e instanceof Error ? e.message : "Unknown error", "error", 4000);
     } finally {
@@ -236,6 +239,7 @@ export default function AdminVideoPage() {
       ));
       setShowEditModal(false);
       showToast("Video Updated", `"${editForm.title}" saved successfully`, "success", 2500);
+      await hapticSuccess();
     } catch (e) {
       showToast("Error", "Failed to save video", "error", 3000);
     }
@@ -250,6 +254,7 @@ export default function AdminVideoPage() {
       setSeriesList((prev) => prev.map((s) => ({ ...s, videoIds: s.videoIds.filter((vid) => vid !== selectedVideoId) })));
       setShowDeleteModal(false);
       showToast("Video Deleted", `"${title}" removed from library`, "success", 2500);
+      await hapticSuccess();
     } catch (e) {
       showToast("Error", "Failed to delete video", "error", 3000);
     }
@@ -270,6 +275,7 @@ export default function AdminVideoPage() {
       setShowCreateSeries(false);
       setSeriesForm({ name: "", description: "", category: "sermon_series", isPublic: true });
       showToast("Series Created", `"${newS.name}" has been added`, "success", 2500);
+      await hapticSuccess();
     } catch (e) {
       showToast("Error", "Failed to create series", "error", 3000);
     }
@@ -281,6 +287,7 @@ export default function AdminVideoPage() {
       setSeriesList(seriesList.filter((s) => s.id !== id));
       if (openSeriesId === id) setOpenSeriesId(null);
       showToast("Series Deleted", "Series removed", "info", 2500);
+      await hapticSuccess();
     } catch (e) {
       showToast("Error", "Failed to delete series", "error", 3000);
     }
@@ -293,6 +300,7 @@ export default function AdminVideoPage() {
     try {
       await updateSeries(seriesId, { videoIds: newIds });
       setSeriesList(seriesList.map((x) => x.id === seriesId ? { ...x, videoIds: newIds } : x));
+      await hapticSuccess();
     } catch (e) {
       showToast("Error", "Failed to remove video", "error", 3000);
     }
@@ -306,6 +314,7 @@ export default function AdminVideoPage() {
     try {
       await updateSeries(openSeriesId, { videoIds: newIds });
       setSeriesList(seriesList.map((x) => x.id === openSeriesId ? { ...x, videoIds: newIds } : x));
+      await hapticSuccess();
     } catch (e) {
       showToast("Error", "Failed to add video", "error", 3000);
     }

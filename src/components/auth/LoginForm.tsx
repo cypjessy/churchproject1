@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { hapticSuccess, hapticError } from "@/lib/haptics";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { useAppStore } from "@/lib/useAppStore";
 import { churchConfig } from "@/lib/churchConfig";
@@ -79,12 +80,12 @@ export default function LoginForm() {
 
     if (!email.includes("@")) {
       setError("Please enter a valid email address");
-      try { const { Haptics, NotificationType } = await import("@capacitor/haptics"); Haptics.notification({ type: NotificationType.Error }).catch(() => {}); } catch {}
+      await hapticError();
       return;
     }
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
-      try { const { Haptics, NotificationType } = await import("@capacitor/haptics"); Haptics.notification({ type: NotificationType.Error }).catch(() => {}); } catch {}
+      await hapticError();
       return;
     }
 
@@ -116,8 +117,7 @@ export default function LoginForm() {
           await NativeBiometric.setCredentials({ server: "faithstream-auth", username: email, password });
         } catch {}
 
-        // Haptic success
-        try { const { Haptics, NotificationType } = await import("@capacitor/haptics"); Haptics.notification({ type: NotificationType.Success }).catch(() => {}); } catch {}
+        await hapticSuccess();
 
         showToast("Welcome Back!", `Signed in as ${userData.display_name || email}`, "success", 2500);
 
@@ -131,7 +131,7 @@ export default function LoginForm() {
       }
     } catch (err: any) {
       const code = err.code;
-      try { const { Haptics, NotificationType } = await import("@capacitor/haptics"); Haptics.notification({ type: NotificationType.Error }).catch(() => {}); } catch {}
+      await hapticError();
       if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setError("Invalid email or password");
       } else if (code === "auth/too-many-requests") {

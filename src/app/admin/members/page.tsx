@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
+import { hapticSuccess } from "@/lib/haptics";
 import AllMembersList from "@/components/admin/AllMembersList";
 import { getUsersPage } from "@/lib/users";
 import type { UserProfile } from "@/lib/users";
