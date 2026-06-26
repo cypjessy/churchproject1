@@ -11,6 +11,8 @@ import { churchConfig } from "@/lib/churchConfig";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const PUBLIC_PATHS = ["/", "/login"];
+// Watch/video pages are public — content is the same for all members
+const PUBLIC_PATH_PREFIXES = ["/admin", "/watch"];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -88,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (
           currentPath &&
           !PUBLIC_PATHS.includes(currentPath) &&
-          !currentPath.startsWith("/admin")
+          !PUBLIC_PATH_PREFIXES.some(p => currentPath.startsWith(p))
         ) {
           if (hasHadUserRef.current) {
             // Transient null guard: Firebase can briefly emit null during
@@ -127,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isProtected =
     pathname &&
     !PUBLIC_PATHS.includes(pathname) &&
-    !pathname.startsWith("/admin");
+    !PUBLIC_PATH_PREFIXES.some(p => pathname.startsWith(p));
 
   if (isLoading && isProtected) {
     return (

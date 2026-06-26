@@ -10,14 +10,14 @@ import BottomNavBar from "@/components/shared/BottomNavBar";
 import ToastBridge from "@/components/dashboard/ToastBridge";
 import { useVideoPlayer } from "@/components/shared/VideoPlayer";
 import { useImageLightbox } from "@/components/shared/ImageLightbox";
-import { getNowPlaying, getSongHistory, getStationPlaylists, getStations, getStationEmbedUrl, getStationId } from "@/lib/azuracast";
+import { getNowPlaying, getSongHistory, getPlaylists, getStationId, getPublicPlayerUrl } from "@/lib/azuracast";
 import { getVideosPage, getSeries } from "@/lib/youtube";
 import { getAlbums } from "@/lib/albums";
 import { getAllAlbumEntries } from "@/lib/albumEntries";
 import type { YouTubeVideo, YouTubeSeries } from "@/lib/youtube";
 import { useYouTubeLive } from "@/hooks/useYouTubeLive";
 import { useAudio } from "@/lib/audio/AudioContext";
-import type { NowPlayingData, SongHistoryItem, Playlist, Station } from "@/lib/azuracast";
+import type { NowPlayingData, SongHistoryItem, Playlist } from "@/lib/azuracast";
 import type { Album } from "@/lib/albums";
 import type { AlbumEntry } from "@/lib/albumEntries";
 
@@ -368,12 +368,7 @@ export default function DashboardPage() {
   const [galleryIndices, setGalleryIndices] = useState<number[]>([]);
   const [scheduleItems, setScheduleItems] = useState<ScheduleSlot[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState(true);
-  const [stations, setStations] = useState<Station[]>([]);
-  const [stationsLoading, setStationsLoading] = useState(true);
-  const [selectedStationId, setSelectedStationId] = useState<number>(2);
-  const [carouselIdx, setCarouselIdx] = useState(0);
-  const [carouselPaused, setCarouselPaused] = useState(false);
-  const carouselTouchRef = useRef({ startX: 0, startY: 0, isSwiping: false });
+
   const [contentReady, setContentReady] = useState(false);
 
   // Delay full content render to prevent ANR on Android WebView
@@ -393,46 +388,23 @@ export default function DashboardPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [offline, setOffline] = useState(false);
 
-  // Sync local isPlaying with global audio state (station-aware)
+  // Sync local isPlaying with global audio state
   useEffect(() => {
     const streamUrl = npData?.station?.listenUrl || "";
-    const nowPlaying = audio.isPlaying && audio.currentStationId === selectedStationId && audio.currentStreamUrl === streamUrl;
+    const nowPlaying = audio.isPlaying && audio.currentStreamUrl === streamUrl;
     setIsPlaying(nowPlaying);
-  }, [audio.isPlaying, audio.currentStationId, selectedStationId, npData]);
+  }, [audio.isPlaying, audio.currentStationId, npData]);
 
   // Push now-playing metadata to Android media notification when audio is playing
   useEffect(() => {
-    if (audio.isPlaying && audio.currentStationId === selectedStationId) {
+    if (audio.isPlaying) {
       const np = npData?.nowPlaying;
       const title = np?.song?.title || "Turningpoint Radio";
       const artist = np?.song?.artist || "Turningpoint Church Nakuru";
       const albumArt = np?.song?.albumArt;
       audio.updateMediaSession(title, artist, albumArt);
     }
-  }, [audio.isPlaying, audio.currentStationId, selectedStationId, npData?.nowPlaying?.song?.title, audio.updateMediaSession]);
-
-  // Set callbacks for next/prev station switching from Android media notification
-  useEffect(() => {
-    if (stations.length < 2) return;
-    audio.setNextStationCallback(() => {
-      const curIdx = stations.findIndex(s => s.id === selectedStationId);
-      if (curIdx < 0) return;
-      const nextIdx = (curIdx + 1) % stations.length;
-      const next = stations[nextIdx];
-      const url = next.listen_url || "";
-      if (url) audio.play(url, next.id);
-      setSelectedStationId(next.id);
-    });
-    audio.setPrevStationCallback(() => {
-      const curIdx = stations.findIndex(s => s.id === selectedStationId);
-      if (curIdx < 0) return;
-      const prevIdx = (curIdx - 1 + stations.length) % stations.length;
-      const prev = stations[prevIdx];
-      const url = prev.listen_url || "";
-      if (url) audio.play(url, prev.id);
-      setSelectedStationId(prev.id);
-    });
-  }, [stations, selectedStationId, audio]);
+  }, [audio.isPlaying, npData?.nowPlaying?.song?.title, audio.updateMediaSession]);
 
   const streamUrl = npData?.station?.listenUrl || "";
 
@@ -463,20 +435,17 @@ export default function DashboardPage() {
     return () => unsub?.();
   }, []);
 
-  const currentStation = stations.find(s => s.id === selectedStationId);
-  const currentEmbedUrl = currentStation ? getStationEmbedUrl(currentStation) : "";
-
   const togglePlay = useCallback(() => {
     if (streamUrl) {
-      audio.toggle(streamUrl, selectedStationId);
+      audio.toggle(streamUrl, Number(getStationId()));
     }
-  }, [audio, streamUrl, selectedStationId]);
+  }, [audio, streamUrl]);
 
   /* Poll AzuraCast now playing every 10 seconds */
   useEffect(() => {
     let mounted = true;
     const poll = async () => {
-      const np = await getNowPlaying(String(selectedStationId)).catch(() => null);
+      const np = await getNowPlaying(getStationId()).catch(() => null);
       const history = await getSongHistory(5).catch(() => []);
       if (!mounted) return;
       if (np) {
@@ -489,7 +458,7 @@ export default function DashboardPage() {
     poll();
     const interval = setInterval(poll, 10000);
     return () => { mounted = false; clearInterval(interval); };
-  }, [selectedStationId]);
+  }, []);
 
   /* Fetch videos, series, albums, and entries from Firestore on mount */
   useEffect(() => {
@@ -517,18 +486,14 @@ export default function DashboardPage() {
     return () => { mounted = false; };
   }, []);
 
-  /* Fetch schedule from all stations' AzuraCast playlists */
+  /* Fetch schedule from single station's AzuraCast playlists */
   useEffect(() => {
     let mounted = true;
     const fetchSchedule = async () => {
-      const allStations = await getStations().catch(() => [] as Station[]);
+      const playlists = await getPlaylists().catch(() => [] as Playlist[]);
       if (!mounted) return;
-      const allSlots: ScheduleSlot[] = [];
-      for (const st of allStations) {
-        const playlists = await getStationPlaylists(String(st.id)).catch(() => [] as Playlist[]);
-        if (!mounted) return;
-        allSlots.push(...computeTodaySchedule(st.id, st.name, playlists));
-      }
+      const stationName = npData?.station?.name || church.name;
+      const allSlots = computeTodaySchedule(Number(getStationId()), stationName, playlists);
       allSlots.sort((a, b) => {
         const aMin = parseTimeToMinutes(a.time);
         const bMin = parseTimeToMinutes(b.time);
@@ -540,82 +505,9 @@ export default function DashboardPage() {
     fetchSchedule();
     const interval = setInterval(fetchSchedule, 60000);
     return () => { mounted = false; clearInterval(interval); };
-  }, []);
+  }, [npData?.station?.name]);
 
-  /* Fetch all stations from AzuraCast */
-  useEffect(() => {
-    let mounted = true;
-    const fetchStations = async () => {
-      const list = await getStations().catch(() => [] as Station[]);
-      if (!mounted) return;
-      setStations(list);
-      setStationsLoading(false);
-    };
-    fetchStations();
-    return () => { mounted = false; };
-  }, []);
 
-  /* Carousel auto-rotation — pauses when user is swiping */
-  useEffect(() => {
-    if (carouselPaused || stations.length < 2) return;
-    const interval = setInterval(() => {
-      setCarouselIdx(prev => (prev + 1) % stations.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [stations.length, carouselPaused]);
-
-  /* Cleanup swipe timer on unmount */
-  useEffect(() => {
-    return () => {
-      if (cardTouchTimerRef.current) clearTimeout(cardTouchTimerRef.current);
-    };
-  }, []);
-
-  /* Touch/swipe handlers for the showcase card */
-  const showcaseTouchStart = useCallback((e: React.TouchEvent) => {
-    carouselTouchRef.current = {
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-      isSwiping: true,
-    };
-    setCarouselPaused(true);
-  }, []);
-
-  const showcaseTouchEnd = useCallback((e: React.TouchEvent) => {
-    const { startX, startY } = carouselTouchRef.current;
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
-    const dx = endX - startX;
-    const dy = endY - startY;
-
-    // Clear any previous resume timer to prevent stacking
-    if (cardTouchTimerRef.current) clearTimeout(cardTouchTimerRef.current);
-    carouselTouchRef.current.isSwiping = false;
-
-    // Only horizontal swipes (more horizontal than vertical)
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
-      if (dx < 0) {
-        // Swipe left → next
-        setCarouselIdx(prev => (prev + 1) % stations.length);
-      } else {
-        // Swipe right → previous
-        setCarouselIdx(prev => (prev - 1 + stations.length) % stations.length);
-      }
-    }
-
-    // Resume auto-rotation after 4 seconds of inactivity
-    cardTouchTimerRef.current = setTimeout(() => {
-      setCarouselPaused(false);
-    }, 4000);
-  }, [stations.length]);
-
-  /* Sync carousel to selected station when user picks one */
-  useEffect(() => {
-    const idx = stations.findIndex(s => s.id === selectedStationId);
-    if (idx >= 0) setCarouselIdx(idx);
-  }, [selectedStationId, stations]);
-
-  const cardTouchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Pull to refresh */
   const [touchStartY, setTouchStartY] = useState(0);
@@ -666,9 +558,6 @@ export default function DashboardPage() {
     const streamerName = npData?.live?.streamerName;
     const stationName = npData?.station?.name || church.name;
     const progressPct = np && np.duration > 0 ? Math.round((np.elapsed / np.duration) * 100) : 0;
-    const carouselStation = stations[carouselIdx] || stations[0] || { id: 1, name: "Radio", description: "", shortcode: "", listen_url: "", url: null, public_player_url: "", is_public: true, mounts: [] } as Station;
-    const carouselColors = ["#E8A838", "#8B5CF6", "#3B82F6", "#22C55E", "#EF4444", "#F59E0B"];
-    const carouselColor = carouselColors[carouselIdx % carouselColors.length];
     const featuredVideo = videos.find((v) => v.isFeatured) || videos[0];
     const latestVideos = videos.filter((v) => !v.isFeatured).slice(0, 8);
 
@@ -713,57 +602,24 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ROTATING STATION SHOWCASE */}
-      {stations.length > 0 && (
+      {/* LIVE RADIO — AzuraCast Public Embed */}
       <section className="feed-section">
-        <div
-          className="showcase-card"
-          onTouchStart={showcaseTouchStart}
-          onTouchEnd={showcaseTouchEnd}
-        >
-          <div className="showcase-bg" style={{
-            background: `linear-gradient(135deg, ${carouselColor}22, ${carouselColor}08)`,
-            borderColor: `${carouselColor}33`,
-          }}>
-            <div className="showcase-glow" style={{ background: `radial-gradient(circle at 70% 50%, ${carouselColor}18, transparent 60%)` }}></div>
-          </div>
-          <div className="showcase-indicator">
-            {stations.map((_, i) => (
-              <span key={i} className={`sc-dot${i === carouselIdx ? " active" : ""}`} style={i === carouselIdx ? { background: carouselColor } : {}} onClick={() => { setCarouselIdx(i); setCarouselPaused(true); setTimeout(() => setCarouselPaused(false), 8000); }} />
-            ))}
-          </div>
-          <div className="showcase-body">
-            <div className="showcase-icon" style={{ background: `linear-gradient(135deg, ${carouselColor}, ${carouselColor}88)` }}>
-              <i className={`fas ${carouselStation.id === 1 ? "fa-church" : carouselStation.id === 2 ? "fa-music" : carouselStation.id === 3 ? "fa-book-open" : "fa-radio"}`}></i>
-            </div>
-            <div className="showcase-info">
-              <div className="showcase-name">{carouselStation.name}</div>
-              <div className="showcase-desc">{carouselStation.description?.slice(0, 60) || "Tune in to our broadcast"}</div>
-              <div className="showcase-meta">
-                <span><i className="fas fa-headphones"></i> {carouselStation.mounts?.[0]?.listeners?.current || 0} listening</span>
-                {carouselStation.listen_url && <span><i className="fas fa-broadcast-tower"></i> Live Stream</span>}
-              </div>
-            </div>
-            <button className="showcase-tune" onClick={() => {
-              if (selectedStationId !== carouselStation.id) {
-                setSelectedStationId(carouselStation.id);
-                // Play new station
-                const url = carouselStation.listen_url || npData?.station?.listenUrl || "";
-                if (url) audio.play(url, carouselStation.id);
-              } else {
-                togglePlay();
-              }
-            }}>
-              <i className={`fas fa-${audio.isPlaying && audio.currentStationId === carouselStation.id ? "pause" : "play"}`}></i>
-              {audio.isPlaying && audio.currentStationId === carouselStation.id ? "Stop" : "Listen"}
-            </button>
-          </div>
+        <div className="section-header-inline">
+          <h2 className="section-title">Live Radio</h2>
+          <button className="section-link" onClick={() => window.location.href = "/radio"}>Full Radio <i className="fas fa-chevron-right"></i></button>
+        </div>
+        <div className="azura-embed">
+          <iframe
+            src={`${getPublicPlayerUrl()}/embed`}
+            frameBorder="0"
+            allowTransparency={true}
+            style={{ width: "100%", minHeight: 150, height: 150, border: 0, borderRadius: 16 }}
+            title="Live Radio"
+          />
         </div>
       </section>
-      )}
 
       {/* PERSISTENT MINI PLAYER */}
-      {stations.length > 0 && (
       <section className="feed-section" style={{ paddingTop: 0 }}>
         <div className="minibar">
           <div className="minibar-cover">
@@ -775,7 +631,7 @@ export default function DashboardPage() {
             {isPlaying && <div className="minibar-eq"><span></span><span></span><span></span></div>}
           </div>
           <div className="minibar-info">
-            <div className="minibar-station">{stations.find(s => s.id === selectedStationId)?.name || stationName}</div>
+            <div className="minibar-station">{npData?.station?.name || stationName}</div>
             <div className="minibar-track">{np?.song?.title || "Station Offline"}{np?.song?.artist ? ` — ${np.song.artist}` : ""}</div>
           </div>
           <div className="minibar-actions">
@@ -788,7 +644,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
-      )}
 
       {/* Note: Audio is handled globally by AudioProvider at the layout level */}
 
@@ -821,8 +676,7 @@ export default function DashboardPage() {
                   {isNow && <span className="rp-live-tag">LIVE</span>}
                 </div>
                 <div className="rp-artist">{item.song.artist}</div>
-                <div className="rp-footer">
-                  <span className="rp-source"><i className="fas fa-radio"></i> {stations.find(s => s.id === selectedStationId)?.name || "Radio"}</span>
+                <div className="rp-footer">                      <span className="rp-source"><i className="fas fa-radio"></i> {npData?.station?.name || "Radio"}</span>
                   <span className={`rp-time${isNow ? " now" : ""}`}><i className="fas fa-clock"></i> {isNow ? "Now" : timeAgo(item.playedAt)}</span>
                 </div>
               </div>
@@ -976,59 +830,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* RADIO STATIONS — horizontal scroll */}
-      <section className="feed-section">
-        <div className="section-header-inline">
-          <h2 className="section-title">All Stations</h2>
-          <button className="section-link" onClick={() => window.location.href = "/radio"}>Full Radio <i className="fas fa-chevron-right"></i></button>
-        </div>
-        <div className="h-scroll">
-          {stationsLoading ? (
-            <div className="st-loading"><i className="fas fa-spinner fa-spin"></i> Loading stations...</div>
-          ) : stations.length === 0 ? (
-            <div className="st-empty">No stations available</div>
-          ) : (
-            stations.map((s, i) => {
-              const color = carouselColors[i % carouselColors.length];
-              return (
-              <div
-                className={`station-card-h${s.id === selectedStationId ? " active" : ""}`}
-                key={s.id}
-                onClick={() => {
-                  if (s.id !== selectedStationId) {
-                    setSelectedStationId(s.id);
-                    // Play new station
-                    const url = s.listen_url || npData?.station?.listenUrl || "";
-                    if (url) audio.play(url, s.id);
-                  } else {
-                    togglePlay();
-                  }
-                }}
-              >
-                <div className="sch-glow" style={{ background: `radial-gradient(circle at 50% 0%, ${color}44, transparent 70%)` }}></div>
-                <div className="sch-icon" style={{ background: `linear-gradient(135deg, ${color}, ${color}88)` }}>
-                  <i className={`fas ${s.id === 1 ? "fa-church" : s.id === 2 ? "fa-music" : s.id === 3 ? "fa-book-open" : "fa-radio"}`}></i>
-                </div>
-                <div className="sch-body">
-                  <div className="sch-name">{s.name}</div>
-                  <div className="sch-desc">{s.description?.slice(0, 30) || s.shortcode}</div>
-                  <div className="sch-meta">
-                    {s.mounts?.[0]?.listeners?.current != null && (
-                      <span className="sch-listeners"><i className="fas fa-headphones"></i> {s.mounts[0].listeners.current}</span>
-                    )}
-                  </div>
-                </div>
-                {s.id === selectedStationId && (
-                  <div className="sch-active-badge" style={{ background: color }}>
-                    <i className={`fas fa-${isPlaying ? "volume-high" : "play"}`}></i>
-                  </div>
-                )}
-              </div>
-              );
-            })
-          )}
-        </div>
-      </section>
+
 
     </>
   );
@@ -1545,70 +1347,16 @@ export default function DashboardPage() {
         .st-loading { padding: 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; gap: 8px; }
         .st-empty { padding: 20px 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
 
-        /* ===== SHOWCASE CARD — PREMIUM HERO ===== */
-        .showcase-card {
-            border-radius: 28px; padding: 28px 24px;
-            position: relative; overflow: hidden;
-            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            animation: showcaseIn 0.6s ease;
-            min-height: 200px;
-            display: flex; flex-direction: column; justify-content: flex-end;
+        /* ===== AZURACAST EMBED WIDGET ===== */
+        .azura-embed {
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            background: var(--surface-card);
+            border: 1px solid var(--border);
         }
-        .showcase-card::before {
-            content: '';
-            position: absolute; top: -120px; left: -60px; right: -60px;
-            height: 260px;
-            background: radial-gradient(ellipse at center, rgba(232,168,56,0.15), transparent 70%);
-            pointer-events: none;
+        .azura-embed iframe {
+            display: block;
         }
-        @keyframes showcaseIn { from { opacity:0;transform:translateY(20px); } to { opacity:1;transform:translateY(0); } }
-        .showcase-bg {
-            position: absolute; inset: 0;
-            border-radius: inherit; border: 1px solid;
-            pointer-events: none;
-        }
-        .showcase-glow {
-            position: absolute; inset: 0;
-            pointer-events: none;
-        }
-        .showcase-indicator {
-            display: flex; gap: 6px; margin-bottom: 16px;
-            position: relative; z-index: 1;
-        }
-        .sc-dot {
-            flex: 1; height: 4px; border-radius: 2px;
-            background: rgba(255,255,255,0.08);
-            transition: all 0.4s ease; cursor: pointer;
-        }
-        .sc-dot.active { background: var(--primary); box-shadow: 0 0 12px rgba(232,168,56,0.5); }
-        .showcase-body {
-            display: flex; align-items: flex-end; gap: 18px;
-            position: relative; z-index: 1;
-        }
-        .showcase-icon {
-            width: 72px; height: 72px; border-radius: 22px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 30px; color: #fff; flex-shrink: 0;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.4), 0 0 40px rgba(232,168,56,0.15);
-            transition: all 0.3s ease;
-        }
-        .showcase-card:active .showcase-icon { transform: scale(0.95); }
-        .showcase-info { flex: 1; min-width: 0; }
-        .showcase-name { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
-        .showcase-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .showcase-meta { display: flex; gap: 16px; margin-top: 8px; }
-        .showcase-meta span { font-size: 12px; color: var(--text-tertiary); display: flex; align-items: center; gap: 6px; }
-        .showcase-meta span i { font-size: 11px; }
-        .showcase-tune {
-            flex-shrink: 0; padding: 14px 28px; border-radius: 28px;
-            border: none; color: #fff; font-size: 14px; font-weight: 700;
-            cursor: pointer; display: flex; align-items: center; gap: 8px;
-            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            box-shadow: 0 4px 24px rgba(232,168,56,0.35);
-            transition: all 0.25s ease; white-space: nowrap;
-            letter-spacing: 0.3px;
-        }
-        .showcase-tune:active { transform: scale(0.93); box-shadow: 0 2px 12px rgba(232,168,56,0.2); }
 
         /* ===== MINI BAR ===== */
         .minibar {
@@ -1661,42 +1409,6 @@ export default function DashboardPage() {
             display: flex; align-items: center; justify-content: center;
         }
         .minibar-expand:active { background: var(--surface-elevated); }
-
-        /* ===== STATION CARDS HORIZONTAL ===== */
-        .station-card-h {
-            width: 180px; border-radius: var(--radius-lg); overflow: hidden;
-            border: 1px solid var(--border);
-            background: var(--surface-card);
-            cursor: pointer; position: relative; flex-shrink: 0;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .station-card-h:active { transform: scale(0.95); }
-        .station-card-h.active {
-            border-color: rgba(232,168,56,0.4);
-            box-shadow: 0 0 0 1px rgba(232,168,56,0.1);
-        }
-        .sch-glow {
-            position: absolute; inset: 0; pointer-events: none;
-            opacity: 0.5;
-        }
-        .station-card-h.active .sch-glow { opacity: 1; }
-        .sch-icon {
-            width: 100%; height: 100px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 36px; color: #fff;
-        }
-        .sch-body { padding: 12px 14px 14px; }
-        .sch-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sch-desc { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sch-meta { margin-top: 6px; }
-        .sch-listeners { font-size: 11px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px; }
-        .sch-active-badge {
-            position: absolute; top: 8px; right: 8px;
-            width: 26px; height: 26px; border-radius: var(--radius-full);
-            display: flex; align-items: center; justify-content: center;
-            color: #fff; font-size: 11px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
 
         /* ===== ONBOARDING ===== */
         .onboarding-overlay {

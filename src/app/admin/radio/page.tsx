@@ -18,6 +18,7 @@ import {
   getApiBase,
   getApiKey,
   getStationId,
+  getPublicPlayerUrl,
 } from "@/lib/azuracast";
 import { hapticSuccess } from "@/lib/haptics";
 import type { Playlist, StationFile, QueueItem } from "@/lib/azuracast";
@@ -312,6 +313,22 @@ export default function AdminRadioPage() {
               <div className="qab-icon purple"><i className="fas fa-list"></i></div>
               <span>New Playlist</span>
             </button>
+          </div>
+        </div>
+
+        {/* ========== LIVE PLAYER EMBED ========== */}
+        <div className="section-block">
+          <div className="section-block-header">
+            <h3><i className="fas fa-radio" style={{ marginRight: 6 }}></i>Live Player</h3>
+          </div>
+          <div className="ov-embed-wrap">
+            <iframe
+              src={`${getPublicPlayerUrl()}/embed`}
+              frameBorder="0"
+              allowTransparency
+              style={{ width: "100%", minHeight: 150, height: 150, border: 0, borderRadius: "var(--radius-sm)" }}
+              title="Live Radio Player"
+            />
           </div>
         </div>
 

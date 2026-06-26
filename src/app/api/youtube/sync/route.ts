@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { addCorsHeaders, handleCorsPreflight } from "@/lib/cors";
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const BASE = "https://www.googleapis.com/youtube/v3";
@@ -57,15 +58,19 @@ function mapCategory(youtubeCategoryId: string | undefined, title: string, descr
   return "sermon";
 }
 
-export async function POST() {
+export async function OPTIONS(req: Request) {
+  return handleCorsPreflight(req);
+}
+
+export async function POST(req: Request) {
   try {
     if (!YOUTUBE_API_KEY) {
-      return NextResponse.json({ error: "YOUTUBE_API_KEY not configured" }, { status: 500 });
+      return addCorsHeaders(NextResponse.json({ error: "YOUTUBE_API_KEY not configured" }, { status: 500 }), req);
     }
 
     const channelId = process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID;
     if (!channelId) {
-      return NextResponse.json({ error: "NEXT_PUBLIC_YOUTUBE_CHANNEL_ID not configured" }, { status: 500 });
+      return addCorsHeaders(NextResponse.json({ error: "NEXT_PUBLIC_YOUTUBE_CHANNEL_ID not configured" }, { status: 500 }), req);
     }
 
     // 1. Fetch channel info
@@ -74,12 +79,12 @@ export async function POST() {
     );
     if (!channelRes.ok) {
       const err = await channelRes.text();
-      return NextResponse.json({ error: `YouTube API error (channel): ${err}` }, { status: 502 });
+      return addCorsHeaders(NextResponse.json({ error: `YouTube API error (channel): ${err}` }, { status: 502 }), req);
     }
     const channelData = await channelRes.json();
     const channelItem = channelData?.items?.[0];
     if (!channelItem) {
-      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+      return addCorsHeaders(NextResponse.json({ error: "Channel not found" }, { status: 404 }), req);
     }
 
     const channel = {
@@ -110,7 +115,7 @@ export async function POST() {
       const plRes = await fetch(`${BASE}/playlistItems?${searchParams}`);
       if (!plRes.ok) {
         const err = await plRes.text();
-        return NextResponse.json({ error: `YouTube API error (playlistItems): ${err}` }, { status: 502 });
+        return addCorsHeaders(NextResponse.json({ error: `YouTube API error (playlistItems): ${err}` }, { status: 502 }), req);
       }
       const plData = await plRes.json();
 
@@ -152,12 +157,15 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ channel, videos });
+    return addCorsHeaders(NextResponse.json({ channel, videos }), req);
   } catch (error) {
     console.error("YouTube sync error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+    return addCorsHeaders(
+      NextResponse.json(
+        { error: error instanceof Error ? error.message : "Unknown error" },
+        { status: 500 }
+      ),
+      req
     );
   }
 }

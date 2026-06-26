@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import { addCorsHeaders, handleCorsPreflight } from "@/lib/cors";
 
 export const runtime = "nodejs";
 
 interface Ctx {
   params: Promise<{ path: string[] }>;
+}
+
+export async function OPTIONS(req: Request) {
+  return handleCorsPreflight(req);
 }
 
 async function proxy(req: Request, ctx: Ctx) {
@@ -39,19 +44,19 @@ async function proxy(req: Request, ctx: Ctx) {
     });
 
     const resText = await res.text();
-    return new NextResponse(resText, {
+    return addCorsHeaders(new NextResponse(resText, {
       status: res.status,
       statusText: res.statusText,
       headers: {
         "Content-Type": res.headers.get("Content-Type") || "application/json",
       },
-    });
+    }), req);
   } catch (err) {
     console.error("[AzuraCast Proxy]", err);
-    return NextResponse.json(
+    return addCorsHeaders(NextResponse.json(
       { error: "AzuraCast proxy failed" },
       { status: 502 }
-    );
+    ), req);
   }
 }
 

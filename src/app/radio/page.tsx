@@ -6,8 +6,8 @@ import { useYouTubeLive } from "@/hooks/useYouTubeLive";
 import { useAudio } from "@/lib/audio/AudioContext";
 import BottomNavBar from "@/components/shared/BottomNavBar";
 import ToastBridge from "@/components/dashboard/ToastBridge";
-import { getNowPlaying, getSongHistory, getPlaylists, getStationFiles, getSettings, getStreamers, getStations, getStationEmbedUrl, getApiBase, getStationId } from "@/lib/azuracast";
-import type { NowPlayingData, SongHistoryItem, Playlist, StationFile, StationSettings, Streamer, Station } from "@/lib/azuracast";
+import { getNowPlaying, getSongHistory, getPlaylists, getStationFiles, getSettings, getStreamers, getApiBase, getStationId, getPublicPlayerUrl } from "@/lib/azuracast";
+import type { NowPlayingData, SongHistoryItem, Playlist, StationFile, StationSettings, Streamer } from "@/lib/azuracast";
 import { churchConfig } from "@/lib/churchConfig";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, query, where, getDocs, orderBy, serverTimestamp, Timestamp, limit } from "firebase/firestore";
@@ -22,9 +22,6 @@ export default function RadioPage() {
   const [stationFiles, setStationFiles] = useState<StationFile[]>([]);
   const [settings, setSettings] = useState<StationSettings | null>(null);
   const [streamers, setStreamers] = useState<Streamer[]>([]);
-  const [stations, setStations] = useState<Station[]>([]);
-  const [stationsLoading, setStationsLoading] = useState(true);
-  const [selectedStationId, setSelectedStationId] = useState<number>(2);
   const [radioLoading, setRadioLoading] = useState(true);
 
   // Song request state
@@ -37,52 +34,28 @@ export default function RadioPage() {
 
 
 
-  const currentStation = stations.find(s => s.id === selectedStationId);
   const audio = useAudio();
-  const listenUrl = currentStation?.listen_url || npData?.station?.listenUrl || `${getApiBase()}/listen/${getStationId()}/radio.mp3`;
-  const embedUrl = currentStation ? getStationEmbedUrl(currentStation) : `${getApiBase()}/public/${getStationId()}/embed`;
-  const stationName = currentStation?.name || settings?.name || "Turningpoint Radio";
+  const listenUrl = npData?.station?.listenUrl || `${getApiBase()}/listen/${getStationId()}/radio.mp3`;
+  const embedUrl = `${getPublicPlayerUrl()}/embed`;
+  const stationName = settings?.name || "Turningpoint Radio";
   const ytLive = useYouTubeLive();
 
   // Push now-playing metadata to Android media notification
   useEffect(() => {
-    if (audio.isPlaying && audio.currentStationId === selectedStationId) {
+    if (audio.isPlaying) {
       const np = npData?.nowPlaying;
       const title = np?.song?.title || stationName;
       const artist = np?.song?.artist || "Turningpoint Church Nakuru";
       const albumArt = np?.song?.albumArt;
       audio.updateMediaSession(title, artist, albumArt);
     }
-  }, [audio.isPlaying, audio.currentStationId, selectedStationId, npData?.nowPlaying?.song?.title, npData?.nowPlaying?.song?.artist, npData?.nowPlaying?.song?.albumArt, audio.updateMediaSession, stationName]);
-
-  // Set next/prev station callbacks for media notification buttons
-  useEffect(() => {
-    if (stations.length < 2) return;
-    audio.setNextStationCallback(() => {
-      const curIdx = stations.findIndex(s => s.id === selectedStationId);
-      if (curIdx < 0) return;
-      const nextIdx = (curIdx + 1) % stations.length;
-      const next = stations[nextIdx];
-      const url = next.listen_url || "";
-      if (url) audio.play(url, next.id);
-      setSelectedStationId(next.id);
-    });
-    audio.setPrevStationCallback(() => {
-      const curIdx = stations.findIndex(s => s.id === selectedStationId);
-      if (curIdx < 0) return;
-      const prevIdx = (curIdx - 1 + stations.length) % stations.length;
-      const prev = stations[prevIdx];
-      const url = prev.listen_url || "";
-      if (url) audio.play(url, prev.id);
-      setSelectedStationId(prev.id);
-    });
-  }, [stations, selectedStationId, audio]);
+  }, [audio.isPlaying, audio.currentStationId, npData?.nowPlaying?.song?.title, npData?.nowPlaying?.song?.artist, npData?.nowPlaying?.song?.albumArt, audio.updateMediaSession, stationName]);
 
   /* Poll AzuraCast now playing + history every 10 seconds */
   useEffect(() => {
     let mounted = true;
     const poll = async () => {
-      const np = await getNowPlaying(String(selectedStationId)).catch(() => null);
+      const np = await getNowPlaying(getStationId()).catch(() => null);
       const history = await getSongHistory(10).catch(() => []);
       if (!mounted) return;
       if (np) setNpData(np);
@@ -92,26 +65,23 @@ export default function RadioPage() {
     poll();
     const interval = setInterval(poll, 10000);
     return () => { mounted = false; clearInterval(interval); };
-  }, [selectedStationId]);
+  }, []);
 
-  /* Fetch playlists, files, settings, streamers, stations on mount */
+  /* Fetch playlists, files, settings, streamers on mount */
   useEffect(() => {
     let mounted = true;
     const fetchMeta = async () => {
-      const [pl, files, s, str, stList] = await Promise.all([
+      const [pl, files, s, str] = await Promise.all([
         getPlaylists().catch(() => [] as Playlist[]),
         getStationFiles().catch(() => [] as StationFile[]),
         getSettings().catch(() => null as StationSettings | null),
         getStreamers().catch(() => [] as Streamer[]),
-        getStations().catch(() => [] as Station[]),
       ]);
       if (!mounted) return;
       setPlaylists(pl);
       setStationFiles(files);
       setSettings(s);
       setStreamers(str);
-      setStations(stList);
-      setStationsLoading(false);
     };
     fetchMeta();
     return () => { mounted = false; };
@@ -145,8 +115,8 @@ export default function RadioPage() {
         songId: fileId,
         songTitle,
         songArtist,
-        stationId: selectedStationId,
-        stationName: currentStation?.name || "Radio",
+        stationId: Number(getStationId()),
+        stationName: stationName || "Radio",
         requestedAt: serverTimestamp(),
       });
       setRequestedSongs(new Set(requestedSongs).add(fileId));
@@ -350,54 +320,6 @@ export default function RadioPage() {
         .msg-card { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; gap: 12px; }
         .msg-card i { font-size: 36px; color: var(--text-tertiary); opacity: 0.5; }
         .msg-card p { font-size: 14px; color: var(--text-secondary); }
-
-        /* ===== STATION CARDS (glass) ===== */
-        .stations-grid { display: flex; flex-direction: column; gap: 10px; }
-        .station-glass {
-          position: relative; display: flex; align-items: center; gap: 14px;
-          padding: 14px 16px;
-          background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: var(--radius-lg);
-          cursor: pointer; overflow: hidden;
-          transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
-          backdrop-filter: blur(12px);
-        }
-        .station-glass:active { transform: scale(0.98); }
-        .station-glass.active {
-          border-color: rgba(232,168,56,0.35);
-          background: linear-gradient(135deg, rgba(232,168,56,0.10), rgba(212,118,42,0.04));
-          box-shadow: 0 0 30px rgba(232,168,56,0.06);
-        }
-        .station-glow {
-          position: absolute; top: -60px; right: -60px; width: 140px; height: 140px;
-          border-radius: var(--radius-full);
-          background: radial-gradient(circle, rgba(232,168,56,0.08), transparent 70%);
-          pointer-events: none; transition: opacity 0.4s ease;
-        }
-        .station-glass.active .station-glow { opacity: 1; }
-        .station-icon {
-          width: 44px; height: 44px; border-radius: var(--radius-md);
-          background: var(--surface-elevated);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 18px; color: var(--text-tertiary); flex-shrink: 0;
-          transition: all 0.3s ease;
-        }
-        .station-glass.active .station-icon {
-          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-          color: #fff; box-shadow: var(--shadow-soft);
-        }
-        .station-info { flex: 1; min-width: 0; }
-        .station-name { font-size: 14px; font-weight: 700; letter-spacing: -0.1px; }
-        .station-desc { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .station-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-        .station-active-badge {
-          width: 28px; height: 28px; border-radius: var(--radius-full);
-          background: var(--success); color: #fff;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 12px; box-shadow: 0 0 16px rgba(74,222,128,0.25);
-        }
-        .station-listeners { font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 4px; }
 
         /* ===== NOW PLAYING CARD (premium hero) ===== */
         .np-glass {
@@ -800,49 +722,6 @@ export default function RadioPage() {
             {/* ===== TAB 1: HOME ===== */}
             {activeTab === "home" && (
               <div className="section-spacer">
-                {/* Stations */}
-                <div className="section-spacer-sm">
-                  <div className="section-hdr">
-                    <h3>Stations</h3>
-                    <span>{stations.length} available</span>
-                  </div>
-                  {stationsLoading ? (
-                    <div className="msg-card"><i className="fas fa-spinner fa-spin"></i><p>Loading stations...</p></div>
-                  ) : stations.length === 0 ? (
-                    <div className="msg-card"><i className="fas fa-radio"></i><p>No stations available</p></div>
-                  ) : (
-                    <div className="stations-grid">
-                      {stations.map((s) => (
-                        <div
-                          className={`station-glass${s.id === selectedStationId ? " active" : ""}`}
-                          key={s.id}
-                          onClick={() => {
-                            if (s.id !== selectedStationId) {
-                              setSelectedStationId(s.id);
-                              window.dispatchEvent(new CustomEvent("show-toast", {
-                                detail: { title: "Station Changed", message: `Switched to ${s.name}`, type: "success", duration: 2000 }
-                              }));
-                            }
-                          }}
-                        >
-                          <div className="station-glow"></div>
-                          <div className="station-icon">
-                            <i className={`fas ${s.id === 1 ? "fa-church" : s.id === 2 ? "fa-music" : "fa-radio"}`}></i>
-                          </div>
-                          <div className="station-info">
-                            <div className="station-name">{s.name}</div>
-                            <div className="station-desc">{s.description?.slice(0, 50) || s.shortcode}</div>
-                          </div>
-                          <div className="station-meta">
-                            {s.id === selectedStationId && <span className="station-active-badge"><i className="fas fa-volume-high"></i></span>}
-                            {s.mounts?.[0]?.listeners != null && <span className="station-listeners"><i className="fas fa-headphones"></i> {s.mounts[0].listeners.current}</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
                 {/* Now Playing — premium hero card with volume controls */}
                 <div className="np-glass">
                   <div className="np-row">
@@ -870,10 +749,10 @@ export default function RadioPage() {
                   {/* Controls row: play button + volume slider */}
                   <div className="np-controls-row">
                     <button
-                      className={`np-play-btn${audio.isPlaying && audio.currentStationId === selectedStationId ? " playing" : ""}`}
-                      onClick={() => audio.toggle(listenUrl, selectedStationId)}
+                      className={`np-play-btn${audio.isPlaying ? " playing" : ""}`}
+                      onClick={() => audio.toggle(listenUrl, Number(getStationId()))}
                     >
-                      <i className={`fas fa-${audio.isPlaying && audio.currentStationId === selectedStationId ? "pause" : "play"}`} style={{ marginLeft: audio.isPlaying && audio.currentStationId === selectedStationId ? 0 : 2 }}></i>
+                      <i className={`fas fa-${audio.isPlaying ? "pause" : "play"}`} style={{ marginLeft: audio.isPlaying ? 0 : 2 }}></i>
                     </button>
                     <div className="np-vol-wrap">
                       <i className={`fas fa-${audio.volume === 0 ? "volume-xmark" : audio.volume < 0.5 ? "volume-low" : "volume-high"}`}></i>
@@ -897,7 +776,7 @@ export default function RadioPage() {
                       style={{ pointerEvents: "none" }}
                     />
                   </div>
-                  {audio.isPlaying && audio.currentStationId === selectedStationId && (
+                  {audio.isPlaying && (
                     <div className="np-bg-indicator">
                       <i className="fas fa-volume-high" style={{ color: "var(--primary)" }}></i>
                       Playing in background
@@ -986,7 +865,7 @@ export default function RadioPage() {
                         <span className={`sched-dot ${item.type.toLowerCase()}`}></span>
                         <div className="sched-info">
                           <div className="sched-name">{item.name}</div>
-                          <div className="sched-host">{currentStation?.name || stationName}</div>
+                          <div className="sched-host">{stationName}</div>
                         </div>
                         <span className={`sched-type-badge ${item.type.toLowerCase()}`}>{item.type}</span>
                       </div>

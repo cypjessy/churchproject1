@@ -6,7 +6,7 @@ import { signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAppStore } from "@/lib/useAppStore";
 import { getYouTubeStats } from "@/lib/youtube";
-import { getNowPlaying as azuracastGetNowPlaying, getSongHistory, getStationStatus, getQueue, toggleAutoDJ, getStreamers, deleteStreamer, getPlaylists, getStationId } from "@/lib/azuracast";
+import { getNowPlaying as azuracastGetNowPlaying, getSongHistory, getStationStatus, getQueue, toggleAutoDJ, getStreamers, deleteStreamer, getPlaylists, getStationId, getPublicPlayerUrl, getApiHost } from "@/lib/azuracast";
 import type { QueueItem, Streamer, Playlist } from "@/lib/azuracast";
 import { getGalleryPhotos } from "@/lib/content";
 import { getBunnyStorageStats, formatBytes } from "@/lib/bunny";
@@ -138,11 +138,23 @@ export default function AdminPage() {
   // Sync handler — calls YouTube API and re-fetches from Firestore
   const handleYtSync = useCallback(async () => {
     setYtSyncing(true);
+
+    // YouTube sync requires a server-side API route (YouTube API key is not public).
+    // If no API host is configured, skip with a clear message.
+    const apiHost = getApiHost();
+    if (!apiHost) {
+      window.dispatchEvent(new CustomEvent("show-toast", {
+        detail: { title: "Backend Required", message: "To sync YouTube, deploy the app to Vercel and set NEXT_PUBLIC_API_HOST in .env.local", type: "error", duration: 5000 },
+      }));
+      setYtSyncing(false);
+      return;
+    }
+
     window.dispatchEvent(new CustomEvent("show-toast", {
       detail: { title: "Syncing", message: "Syncing with YouTube...", type: "info", duration: 2500 },
     }));
     try {
-      const res = await fetch("/api/youtube/sync", { method: "POST" });
+      const res = await fetch(`${apiHost}/api/youtube/sync`, { method: "POST" });
       if (!res.ok) throw new Error("Sync failed");
       const data = await res.json();
       // Save channel + videos to Firestore via existing helpers (called client-side)
@@ -1520,6 +1532,21 @@ export default function AdminPage() {
                     <i className="fas fa-sliders"></i> Radio Settings
                   </button>
                 </div>
+              </div>
+
+              {/* LIVE PLAYER EMBED */}
+              <div className="widget-card">
+                <div className="widget-label">
+                  <i className="fas fa-radio" style={{ marginRight: 6, color: "var(--primary)" }}></i>
+                  Live Player
+                </div>
+                <iframe
+                  src={`${getPublicPlayerUrl()}/embed`}
+                  frameBorder="0"
+                  allowTransparency
+                  style={{ width: "100%", minHeight: 150, height: 150, border: 0, borderRadius: "var(--radius-sm)" }}
+                  title="Live Radio Player"
+                />
               </div>
 
               {/* TODAY AT A GLANCE */}

@@ -12,6 +12,27 @@ export function getStationId(): string {
   }
 }
 
+/** Extract the station shortcode from the public embed URL (last path segment).
+ *  Falls back to getStationId() if the embed URL is not set. */
+export function getStationShortcode(): string {
+  try {
+    const url = process.env.NEXT_PUBLIC_AZURACAST_PUBLIC_EMBED_URL || "";
+    const segs = url.split("/").filter(Boolean);
+    return segs[segs.length - 1] || getStationId();
+  } catch {
+    return getStationId();
+  }
+}
+
+/** Return the full public embed URL, falling back to constructing one from the API base + shortcode. */
+export function getPublicPlayerUrl(): string {
+  try {
+    return process.env.NEXT_PUBLIC_AZURACAST_PUBLIC_EMBED_URL || `${getApiBase()}/public/${getStationShortcode()}`;
+  } catch {
+    return `${getApiBase()}/public/${getStationShortcode()}`;
+  }
+}
+
 const STATION_ID = getStationId();
 
 export function getApiBase(): string {
@@ -26,11 +47,24 @@ export function getApiKey(): string {
   return "";
 }
 
+/** Return the API host for server-side route proxying. When set, the app
+ *  will call an external server (e.g. Vercel) for API routes instead of
+ *  relying on the Next.js dev/production server. Leave empty for relative URLs. */
+export function getApiHost(): string {
+  try {
+    return process.env.NEXT_PUBLIC_API_HOST || "";
+  } catch {
+    return "";
+  }
+}
+
 async function apiFetch<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<{ ok: boolean; status: number; data?: T }> {
   const key = getApiKey();
+  const apiHost = getApiHost();
+  const apiBase = getApiBase();
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -38,7 +72,12 @@ async function apiFetch<T>(
     };
     if (key) headers["Authorization"] = `Bearer ${key}`;
 
-    const res = await fetch(`/api/azuracast${endpoint}`, {
+    // When apiHost is set, call via the Vercel proxy; otherwise call AzuraCast directly
+    const url = apiHost
+      ? `${apiHost}/api/azuracast${endpoint}`
+      : `${apiBase}/api${endpoint}`;
+
+    const res = await fetch(url, {
       ...options,
       headers,
       cache: "no-store",
@@ -283,9 +322,30 @@ export async function getNowPlaying(
 }
 
 export async function getStations(): Promise<Station[]> {
-  const result = await apiFetch<Station[]>("/stations");
-  if (result.ok && Array.isArray(result.data)) return result.data;
-  return [];
+  // Return a single station derived from env vars — no multi-station API call
+  const embedUrl = getPublicPlayerUrl();
+  const shortcode = getStationShortcode();
+  const stationId = Number(getStationId()) || 0;
+  return [{
+    id: stationId,
+    name: shortcode.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    shortcode,
+    description: "",
+    listen_url: `${getApiBase()}/listen/${getStationId()}/radio.mp3`,
+    url: getApiBase(),
+    public_player_url: embedUrl,
+    is_public: true,
+    mounts: [{
+      id: 0,
+      name: "Default",
+      url: `${getApiBase()}/listen/${getStationId()}/radio.mp3`,
+      bitrate: 128,
+      format: "mp3",
+      listeners: { current: 0, unique: 0, total: 0 },
+      path: "/radio.mp3",
+      is_default: true,
+    }],
+  }];
 }
 
 export function getStationEmbedUrl(station: Station): string {
