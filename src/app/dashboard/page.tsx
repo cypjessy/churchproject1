@@ -687,7 +687,7 @@ export default function DashboardPage() {
           <h2 className="section-title">Featured Video</h2>
               <button className="section-link" onClick={() => router.push("/watch")}>See All Videos <i className="fas fa-chevron-right"></i></button>
         </div>
-        <div className="fv-card" onClick={() => player.play(featuredVideo)}>
+        <div className="fv-card" onClick={() => router.push(`/watch/${featuredVideo.youtubeId}`)}>
           <div className="fv-thumb">
             <div className="fv-thumb-glow"></div>
             <img src={featuredVideo.thumbnail} alt="" />
@@ -756,7 +756,7 @@ export default function DashboardPage() {
         </div>
         <div className="vg-grid">
           {latestVideos.slice(0, 6).map((v) => (
-            <div className="vg-card" key={v.youtubeId} onClick={() => player.play(v)}>
+            <div className="vg-card" key={v.youtubeId} onClick={() => router.push(`/watch/${v.youtubeId}`)}>
               <div className="vg-thumb">
                 <img src={v.thumbnail} alt="" />
                 <div className="vg-play-icon"><i className="fas fa-play"></i></div>
