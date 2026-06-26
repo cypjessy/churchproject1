@@ -16,7 +16,7 @@ import { getAlbums } from "@/lib/albums";
 import { getAllAlbumEntries } from "@/lib/albumEntries";
 import type { YouTubeVideo, YouTubeSeries } from "@/lib/youtube";
 import { useYouTubeLive } from "@/hooks/useYouTubeLive";
-import { useMusicControls } from "@/hooks/useMusicControls";
+import { useAudio } from "@/lib/audio/AudioContext";
 import type { NowPlayingData, SongHistoryItem, Playlist, Station } from "@/lib/azuracast";
 import type { Album } from "@/lib/albums";
 import type { AlbumEntry } from "@/lib/albumEntries";
@@ -46,9 +46,9 @@ interface ScheduleSlot {
    ================================================================== */
 
 const church = {
-  name: "Kingdom Seekers Church",
+  name: "Turningpoint Church Nakuru",
   tagline: "Worship. Word. Community.",
-  logoInitials: "KS",
+  logoInitials: "TP",
 };
 
 const memberName = "Derick";
@@ -56,14 +56,14 @@ const memberName = "Derick";
 function getFallbackSchedule(): ScheduleSlot[] {
   const h = new Date().getHours();
   if (h < 6)  return [{ time: "6:00 AM", label: "No broadcasts scheduled", stationName: "", stationId: 0, ended: false, isNow: false }];
-  if (h < 9)  return [{ time: "6:00 AM", label: "Morning Devotion", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: true }, { time: "9:00 AM", label: "Sunday Worship", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: false }];
-  if (h < 14) return [{ time: "6:00 AM", label: "Morning Devotion", stationName: "Kingdom Seekers", stationId: 1, ended: true, isNow: false }, { time: "9:00 AM", label: "Sunday Worship", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: true }, { time: "2:00 PM", label: "Afternoon Praise", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: false }];
-  if (h < 19) return [{ time: "6:00 AM", label: "Morning Devotion", stationName: "Kingdom Seekers", stationId: 1, ended: true, isNow: false }, { time: "9:00 AM", label: "Sunday Worship", stationName: "Kingdom Seekers", stationId: 1, ended: true, isNow: false }, { time: "2:00 PM", label: "Afternoon Praise", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: true }, { time: "7:00 PM", label: "Evening Service", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: false }];
+  if (h < 9)  return [{ time: "6:00 AM", label: "Morning Devotion", stationName: "Turningpoint", stationId: 1, ended: false, isNow: true }, { time: "9:00 AM", label: "Sunday Worship", stationName: "Turningpoint", stationId: 1, ended: false, isNow: false }];
+  if (h < 14) return [{ time: "6:00 AM", label: "Morning Devotion", stationName: "Turningpoint", stationId: 1, ended: true, isNow: false }, { time: "9:00 AM", label: "Sunday Worship", stationName: "Turningpoint", stationId: 1, ended: false, isNow: true }, { time: "2:00 PM", label: "Afternoon Praise", stationName: "Turningpoint", stationId: 1, ended: false, isNow: false }];
+  if (h < 19) return [{ time: "6:00 AM", label: "Morning Devotion", stationName: "Turningpoint", stationId: 1, ended: true, isNow: false }, { time: "9:00 AM", label: "Sunday Worship", stationName: "Turningpoint", stationId: 1, ended: true, isNow: false }, { time: "2:00 PM", label: "Afternoon Praise", stationName: "Turningpoint", stationId: 1, ended: false, isNow: true }, { time: "7:00 PM", label: "Evening Service", stationName: "Turningpoint", stationId: 1, ended: false, isNow: false }];
   return [
-    { time: "6:00 AM", label: "Morning Devotion", stationName: "Kingdom Seekers", stationId: 1, ended: true, isNow: false },
-    { time: "9:00 AM", label: "Sunday Worship", stationName: "Kingdom Seekers", stationId: 1, ended: true, isNow: false },
-    { time: "2:00 PM", label: "Afternoon Praise", stationName: "Kingdom Seekers", stationId: 1, ended: true, isNow: false },
-    { time: "7:00 PM", label: "Evening Service", stationName: "Kingdom Seekers", stationId: 1, ended: false, isNow: true },
+    { time: "6:00 AM", label: "Morning Devotion", stationName: "Turningpoint", stationId: 1, ended: true, isNow: false },
+    { time: "9:00 AM", label: "Sunday Worship", stationName: "Turningpoint", stationId: 1, ended: true, isNow: false },
+    { time: "2:00 PM", label: "Afternoon Praise", stationName: "Turningpoint", stationId: 1, ended: true, isNow: false },
+    { time: "7:00 PM", label: "Evening Service", stationName: "Turningpoint", stationId: 1, ended: false, isNow: true },
   ];
 }
 
@@ -133,13 +133,47 @@ function RotatingGallery({
   onAlbumClick: (albumId: string, images: { url: string; title: string }[]) => void;
 }) {
   const router = useRouter();
-  const intervalRefs = useRef<(ReturnType<typeof setInterval> | null)[]>([]);
 
   const validAlbums = useMemo(() => {
     return albums.filter((a) => a.photoCount > 0 || entries.some((e) => e.albumId === a.id));
   }, [albums, entries]);
 
-  const displayCount = 7;
+  // Build a flat list of all images (url + album info) for the hero slideshow
+  const heroImages = useMemo(() => {
+    const all: { url: string; albumId: string; albumTitle: string; photoCount: number }[] = [];
+    for (const album of validAlbums) {
+      const imgs: string[] = [];
+      if (album.coverUrl) imgs.push(album.coverUrl);
+      const albumEntries = entries.filter((e) => e.albumId === album.id && e.coverUrl);
+      albumEntries.forEach((e) => { if (e.coverUrl) imgs.push(e.coverUrl); });
+      for (const url of imgs) {
+        all.push({
+          url,
+          albumId: album.id,
+          albumTitle: album.title,
+          photoCount: album.photoCount || albumEntries.length,
+        });
+      }
+    }
+    // Shuffle for variety on each load
+    return all.sort(() => Math.random() - 0.5);
+  }, [validAlbums, entries]);
+
+  const intervalRefs = useRef<(ReturnType<typeof setInterval> | null)[]>([]);
+
+  const [heroIdx, setHeroIdx] = useState(0);
+
+  // Auto-cycle hero every 4 seconds
+  useEffect(() => {
+    if (heroImages.length < 2) return;
+    const interval = setInterval(() => {
+      setHeroIdx((prev) => (prev + 1) % heroImages.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [heroImages.length]);
+
+  // Small grid display (first 6 albums)
+  const displayCount = 6;
   const displayAlbums = useMemo(() => {
     const shuffled = [...validAlbums].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, displayCount);
@@ -178,62 +212,115 @@ function RotatingGallery({
   }, [displayAlbums, getAlbumImages, setGalleryIndices]);
 
   const galleryAccents = ["#E8A838", "#8B5CF6", "#22C55E", "#3B82F6", "#EF4444", "#F59E0B", "#EC4899"];
+  const currentHero = heroImages[heroIdx];
 
-  if (displayAlbums.length === 0) return null;
+  if (validAlbums.length === 0) return null;
 
   return (
     <section className="feed-section">
       <div className="section-header-inline">
         <h2 className="section-title">Photo Gallery <span className="section-title-badge">{validAlbums.length} albums</span></h2>
-        <button className="section-link" onClick={() => router.push("/gallery")}>View All <i className="fas fa-chevron-right"></i></button>
+              <button className="section-link" onClick={() => window.location.href = "/gallery"}>View All <i className="fas fa-chevron-right"></i></button>
       </div>
-      <div className="pg-grid">
-        {displayAlbums.map((album, idx) => {
-          const images = getAlbumImages(album);
-          const imgIdx = galleryIndices[idx] ?? 0;
-          const currentImage = images[imgIdx % images.length] || "";
-          const isCycling = images.length > 1;
-          const accent = galleryAccents[idx % galleryAccents.length];
-          const isHero = idx === 0 && displayAlbums.length >= 3;
 
-          return (
-            <div
-              className={`pg-card${isHero ? " hero" : ""}`}
-              key={album.id}
-              onClick={() => {
-                const albumImages = getAlbumImages(album);
-                const albumEntry = entries.filter((e) => e.albumId === album.id);
-                const imageList = albumImages.map((u, i) => ({
-                  url: u,
-                  title: albumEntry[i]?.title || album.title,
-                }));
-                onAlbumClick(album.id, imageList);
-              }}
-            >
-              <div className="pg-glow" style={{ background: `radial-gradient(circle at 50% 0%, ${accent}33, transparent 70%)` }} />
-              <div className="pg-inner">
-                {currentImage ? (
-                  <img className="pg-img" key={`${album.id}-${imgIdx}`} src={currentImage} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                ) : (
-                  <div className="pg-img-placeholder">
-                    <i className="fas fa-image"></i>
-                  </div>
-                )}
-                {isCycling && (
-                  <div className="pg-cycling">
-                    <i className="fas fa-random"></i>
-                  </div>
-                )}
+      {/* Hero slideshow — large auto-playing banner */}
+      {heroImages.length > 0 && (
+        <div className="pg-hero" onClick={() => {
+          if (currentHero) {
+            const albumImages = entries
+              .filter((e) => e.albumId === currentHero.albumId && e.coverUrl)
+              .map((e) => ({ url: e.coverUrl!, title: e.title || currentHero.albumTitle }));
+            if (currentHero.url) {
+              const coverEntry = albums.find((a) => a.id === currentHero.albumId);
+              if (coverEntry?.coverUrl) {
+                albumImages.unshift({ url: coverEntry.coverUrl, title: currentHero.albumTitle });
+              }
+            }
+            onAlbumClick(currentHero.albumId, albumImages.length > 0 ? albumImages : [{ url: currentHero.url, title: currentHero.albumTitle }]);
+          }
+        }}>
+          <div className="pg-hero-bg">
+            {currentHero && (
+              <img
+                key={heroIdx}
+                className="pg-hero-img"
+                src={currentHero.url}
+                alt=""
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            )}
+          </div>
+          {currentHero && (
+            <>
+              <div className="pg-hero-gradient"></div>
+              <div className="pg-hero-body">
+                <div className="pg-hero-label">Featured Album</div>
+                <div className="pg-hero-title">{currentHero.albumTitle}</div>
+                <div className="pg-hero-meta">{currentHero.photoCount} photos · Tap to explore</div>
               </div>
-              <div className="pg-accent-bar" style={{ background: accent }} />
-              <div className="pg-overlay">
-                <div className="pg-title">{album.title}</div>
-                <div className="pg-count">{album.photoCount || entries.filter((e) => e.albumId === album.id).length} photos</div>
+              <div className="pg-hero-dots">
+                {heroImages.slice(0, Math.min(heroImages.length, 24)).map((_, i) => (
+                  <span
+                    key={i}
+                    className={`pg-hero-dot${i === heroIdx % Math.min(heroImages.length, 24) ? " active" : ""}`}
+                    onClick={(e) => { e.stopPropagation(); setHeroIdx(i); }}
+                  />
+                ))}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Thumbnail grid — small cards that navigate to album */}
+      {displayAlbums.length > 0 && (
+        <div className="pg-grid">
+          {displayAlbums.map((album, idx) => {
+            const images = getAlbumImages(album);
+            const imgIdx = galleryIndices[idx] ?? 0;
+            const currentImage = images[imgIdx % images.length] || "";
+            const isCycling = images.length > 1;
+            const accent = galleryAccents[idx % galleryAccents.length];
+
+            return (
+              <div
+                className="pg-card"
+                key={album.id}
+                onClick={() => {
+                  const albumImages = getAlbumImages(album);
+                  const albumEntry = entries.filter((e) => e.albumId === album.id);
+                  const imageList = albumImages.map((u, i) => ({
+                    url: u,
+                    title: albumEntry[i]?.title || album.title,
+                  }));
+                  onAlbumClick(album.id, imageList);
+                }}
+              >
+                <div className="pg-glow" style={{ background: `radial-gradient(circle at 50% 0%, ${accent}33, transparent 70%)` }} />
+                <div className="pg-inner">
+                  {currentImage ? (
+                    <img className="pg-img" key={`${album.id}-${imgIdx}`} src={currentImage} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  ) : (
+                    <div className="pg-img-placeholder">
+                      <i className="fas fa-image"></i>
+                    </div>
+                  )}
+                  {isCycling && (
+                    <div className="pg-cycling">
+                      <i className="fas fa-random"></i>
+                    </div>
+                  )}
+                </div>
+                <div className="pg-accent-bar" style={{ background: accent }} />
+                <div className="pg-overlay">
+                  <div className="pg-title">{album.title}</div>
+                  <div className="pg-count">{album.photoCount || entries.filter((e) => e.albumId === album.id).length} photos</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -258,9 +345,8 @@ export default function DashboardPage() {
       await firebaseSignOut(auth);
       storeLogout();
     } catch (_) {}
-    router.push("/");
+    window.location.href = "/";
   };
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("onboarding_done") !== "true";
@@ -287,41 +373,68 @@ export default function DashboardPage() {
   const [selectedStationId, setSelectedStationId] = useState<number>(1);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [carouselPaused, setCarouselPaused] = useState(false);
+  const carouselTouchRef = useRef({ startX: 0, startY: 0, isSwiping: false });
+  const [contentReady, setContentReady] = useState(false);
+
+  // Delay full content render to prevent ANR on Android WebView
+  useEffect(() => {
+    const timer = setTimeout(() => setContentReady(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const player = useVideoPlayer({ videos, seriesList });
   const imageViewer = useImageLightbox();
   const ytLive = useYouTubeLive();
+  const audio = useAudio();
 
-  const currentTrackTitle = npData?.nowPlaying?.song?.title || "Kingdom Seekers Church Radio";
-  const currentTrackArtist = npData?.nowPlaying?.song?.artist || "Kingdom Seekers Church";
-  const currentAlbumArt = npData?.nowPlaying?.song?.albumArt || "";
-
-  const musicControls = useMusicControls({
-    isPlaying,
-    title: currentTrackTitle,
-    artist: currentTrackArtist,
-    albumArt: currentAlbumArt,
-    onPlay: () => {
-      const audio = audioRef.current;
-      if (audio && audio.paused) {
-        audio.play().catch(() => {});
-        setIsPlaying(true);
-      }
-    },
-    onPause: () => {
-      const audio = audioRef.current;
-      if (audio && !audio.paused) {
-        audio.pause();
-        setIsPlaying(false);
-      }
-    },
-  });
+  // Music controls plugin disabled due to native crash on Android
+  // const musicControls = useMusicControls({...});
 
   const contentRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [embedVisible, setEmbedVisible] = useState(false);
   const [offline, setOffline] = useState(false);
+
+  // Sync local isPlaying with global audio state (station-aware)
+  useEffect(() => {
+    const streamUrl = npData?.station?.listenUrl || "";
+    const nowPlaying = audio.isPlaying && audio.currentStationId === selectedStationId && audio.currentStreamUrl === streamUrl;
+    setIsPlaying(nowPlaying);
+  }, [audio.isPlaying, audio.currentStationId, selectedStationId, npData]);
+
+  // Push now-playing metadata to Android media notification when audio is playing
+  useEffect(() => {
+    if (audio.isPlaying && audio.currentStationId === selectedStationId) {
+      const np = npData?.nowPlaying;
+      const title = np?.song?.title || "Turningpoint Radio";
+      const artist = np?.song?.artist || "Turningpoint Church Nakuru";
+      const albumArt = np?.song?.albumArt;
+      audio.updateMediaSession(title, artist, albumArt);
+    }
+  }, [audio.isPlaying, audio.currentStationId, selectedStationId, npData?.nowPlaying?.song?.title, audio.updateMediaSession]);
+
+  // Set callbacks for next/prev station switching from Android media notification
+  useEffect(() => {
+    if (stations.length < 2) return;
+    audio.setNextStationCallback(() => {
+      const curIdx = stations.findIndex(s => s.id === selectedStationId);
+      if (curIdx < 0) return;
+      const nextIdx = (curIdx + 1) % stations.length;
+      const next = stations[nextIdx];
+      const url = next.listen_url || "";
+      if (url) audio.play(url, next.id);
+      setSelectedStationId(next.id);
+    });
+    audio.setPrevStationCallback(() => {
+      const curIdx = stations.findIndex(s => s.id === selectedStationId);
+      if (curIdx < 0) return;
+      const prevIdx = (curIdx - 1 + stations.length) % stations.length;
+      const prev = stations[prevIdx];
+      const url = prev.listen_url || "";
+      if (url) audio.play(url, prev.id);
+      setSelectedStationId(prev.id);
+    });
+  }, [stations, selectedStationId, audio]);
+
+  const streamUrl = npData?.station?.listenUrl || "";
 
   // Network detection via Capacitor
   useEffect(() => {
@@ -352,26 +465,12 @@ export default function DashboardPage() {
 
   const currentStation = stations.find(s => s.id === selectedStationId);
   const currentEmbedUrl = currentStation ? getStationEmbedUrl(currentStation) : "";
-  const streamUrl = npData?.station?.listenUrl || "";
 
   const togglePlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      if (audio.paused) {
-        if (!audio.hasAttribute("src")) {
-          audio.src = streamUrl;
-        }
-        audio.play().catch(() => {});
-        setIsPlaying(true);
-      } else {
-        audio.pause();
-        setIsPlaying(false);
-      }
-    } else {
-      setEmbedVisible(true);
-      setIsPlaying(true);
+    if (streamUrl) {
+      audio.toggle(streamUrl, selectedStationId);
     }
-  }, [streamUrl]);
+  }, [audio, streamUrl, selectedStationId]);
 
   /* Poll AzuraCast now playing every 10 seconds */
   useEffect(() => {
@@ -456,7 +555,7 @@ export default function DashboardPage() {
     return () => { mounted = false; };
   }, []);
 
-  /* Carousel auto-rotation */
+  /* Carousel auto-rotation — pauses when user is swiping */
   useEffect(() => {
     if (carouselPaused || stations.length < 2) return;
     const interval = setInterval(() => {
@@ -465,11 +564,58 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [stations.length, carouselPaused]);
 
+  /* Cleanup swipe timer on unmount */
+  useEffect(() => {
+    return () => {
+      if (cardTouchTimerRef.current) clearTimeout(cardTouchTimerRef.current);
+    };
+  }, []);
+
+  /* Touch/swipe handlers for the showcase card */
+  const showcaseTouchStart = useCallback((e: React.TouchEvent) => {
+    carouselTouchRef.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      isSwiping: true,
+    };
+    setCarouselPaused(true);
+  }, []);
+
+  const showcaseTouchEnd = useCallback((e: React.TouchEvent) => {
+    const { startX, startY } = carouselTouchRef.current;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const dx = endX - startX;
+    const dy = endY - startY;
+
+    // Clear any previous resume timer to prevent stacking
+    if (cardTouchTimerRef.current) clearTimeout(cardTouchTimerRef.current);
+    carouselTouchRef.current.isSwiping = false;
+
+    // Only horizontal swipes (more horizontal than vertical)
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      if (dx < 0) {
+        // Swipe left → next
+        setCarouselIdx(prev => (prev + 1) % stations.length);
+      } else {
+        // Swipe right → previous
+        setCarouselIdx(prev => (prev - 1 + stations.length) % stations.length);
+      }
+    }
+
+    // Resume auto-rotation after 4 seconds of inactivity
+    cardTouchTimerRef.current = setTimeout(() => {
+      setCarouselPaused(false);
+    }, 4000);
+  }, [stations.length]);
+
   /* Sync carousel to selected station when user picks one */
   useEffect(() => {
     const idx = stations.findIndex(s => s.id === selectedStationId);
     if (idx >= 0) setCarouselIdx(idx);
   }, [selectedStationId, stations]);
+
+  const cardTouchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Pull to refresh */
   const [touchStartY, setTouchStartY] = useState(0);
@@ -541,8 +687,7 @@ export default function DashboardPage() {
                 {stationName} · {listeners} listening
               </div>
             </div>
-          </div>
-          <button className="live-banner-btn" onClick={() => { setIsPlaying(true); router.push("/radio"); }}>
+          </div>              <button className="live-banner-btn" onClick={() => { setIsPlaying(true); window.location.href = "/radio"; }}>
             <i className="fas fa-play"></i> Tune In Now
           </button>
         </div>
@@ -550,7 +695,7 @@ export default function DashboardPage() {
 
       {/* LIVE BANNER — YouTube */}
       {ytLive.status.isLive && (
-        <div className="live-banner" style={{ borderLeftColor: "#FF0000" }} onClick={() => router.push("/watch")}>
+        <div className="live-banner" style={{ borderLeftColor: "#FF0000" }} onClick={() => window.location.href = "/watch"}>
           <div className="live-banner-left">
             <div className="live-banner-dot" style={{ background: "#FF0000" }}></div>
             <div className="live-banner-info">
@@ -562,7 +707,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <button className="live-banner-btn" onClick={(e) => { e.stopPropagation(); router.push("/watch"); }}>
+          <button className="live-banner-btn" onClick={(e) => { e.stopPropagation(); window.location.href = "/watch"; }}>
             <i className="fas fa-play"></i> Watch Now
           </button>
         </div>
@@ -571,7 +716,11 @@ export default function DashboardPage() {
       {/* ROTATING STATION SHOWCASE */}
       {stations.length > 0 && (
       <section className="feed-section">
-        <div className="showcase-card">
+        <div
+          className="showcase-card"
+          onTouchStart={showcaseTouchStart}
+          onTouchEnd={showcaseTouchEnd}
+        >
           <div className="showcase-bg" style={{
             background: `linear-gradient(135deg, ${carouselColor}22, ${carouselColor}08)`,
             borderColor: `${carouselColor}33`,
@@ -598,17 +747,15 @@ export default function DashboardPage() {
             <button className="showcase-tune" onClick={() => {
               if (selectedStationId !== carouselStation.id) {
                 setSelectedStationId(carouselStation.id);
-                setEmbedVisible(true);
-                setIsPlaying(true);
+                // Play new station
+                const url = carouselStation.listen_url || npData?.station?.listenUrl || "";
+                if (url) audio.play(url, carouselStation.id);
               } else {
                 togglePlay();
               }
-              window.dispatchEvent(new CustomEvent("show-toast", {
-                detail: { title: carouselStation.name, message: embedVisible && selectedStationId === carouselStation.id ? "Player closed" : "Player opened", type: "success", duration: 2000 }
-              }));
             }}>
-              <i className={`fas fa-${embedVisible && selectedStationId === carouselStation.id ? "pause" : "play"}`}></i>
-              {embedVisible && selectedStationId === carouselStation.id ? "Close" : "Listen"}
+              <i className={`fas fa-${audio.isPlaying && audio.currentStationId === carouselStation.id ? "pause" : "play"}`}></i>
+              {audio.isPlaying && audio.currentStationId === carouselStation.id ? "Stop" : "Listen"}
             </button>
           </div>
         </div>
@@ -635,7 +782,7 @@ export default function DashboardPage() {
             <button className="minibar-play-btn" onClick={togglePlay}>
               <i className={`fas fa-${isPlaying ? "pause" : "play"}`}></i>
             </button>
-            <button className="minibar-expand" onClick={() => router.push("/radio")}>
+            <button className="minibar-expand" onClick={() => window.location.href = "/radio"}>
               <i className="fas fa-expand"></i>
             </button>
           </div>
@@ -643,49 +790,14 @@ export default function DashboardPage() {
       </section>
       )}
 
-      {/* Native audio player (remounts on station switch to avoid overlap) */}
-      {embedVisible && streamUrl && (
-        <div key={selectedStationId} style={{ position: "fixed", bottom: 0, left: 0, width: "100%", zIndex: 100, background: "var(--surface-elevated)", borderTop: "1px solid var(--border)" }}>
-          <audio
-            ref={audioRef}
-            src={streamUrl}
-            controls
-            autoPlay={isPlaying}
-            onPlay={() => {
-              if (disconnectTimerRef.current) {
-                clearTimeout(disconnectTimerRef.current);
-                disconnectTimerRef.current = null;
-              }
-              const el = audioRef.current;
-              if (el && !el.hasAttribute("src")) {
-                el.src = streamUrl;
-                el.play().catch(() => {});
-              }
-              setIsPlaying(true);
-            }}
-            onPause={() => {
-              setIsPlaying(false);
-              disconnectTimerRef.current = setTimeout(() => {
-                const el = audioRef.current;
-                if (el && el.paused) {
-                  el.removeAttribute("src");
-                  el.load();
-                }
-                disconnectTimerRef.current = null;
-              }, 5000);
-            }}
-            onEnded={() => setIsPlaying(false)}
-            style={{ width: "100%", display: "block", height: 52 }}
-          />
-        </div>
-      )}
+      {/* Note: Audio is handled globally by AudioProvider at the layout level */}
 
       {/* RECENTLY PLAYED — glass premium cards */}
       {songHistory.length > 0 && (
       <section className="feed-section">
         <div className="section-header-inline">
           <h2 className="section-title">Now Playing <span className="section-title-badge">Recent</span></h2>
-          <button className="section-link" onClick={() => router.push("/radio")}>Full History <i className="fas fa-chevron-right"></i></button>
+          <button className="section-link" onClick={() => window.location.href = "/radio"}>Full History <i className="fas fa-chevron-right"></i></button>
         </div>
         <div className="rp-list">
           {songHistory.slice(0, 3).map((item, i) => {
@@ -701,11 +813,7 @@ export default function DashboardPage() {
                     <i className="fas fa-waveform"></i>
                   </div>
                 )}
-                {isNow && (
-                  <div className="rp-now-badge">
-                    <div className="rp-eq"><span></span><span></span><span></span></div>
-                  </div>
-                )}
+
               </div>
               <div className="rp-body">
                 <div className="rp-title-row">
@@ -731,9 +839,9 @@ export default function DashboardPage() {
       <section className="feed-section">
         <div className="section-header-inline">
           <h2 className="section-title">Featured Video</h2>
-          <button className="section-link" onClick={() => router.push("/watch")}>See All Videos <i className="fas fa-chevron-right"></i></button>
+              <button className="section-link" onClick={() => window.location.href = "/watch"}>See All Videos <i className="fas fa-chevron-right"></i></button>
         </div>
-        <div className="fv-card" onClick={() => router.push(`/watch/${featuredVideo.youtubeId}`)}>
+        <div className="fv-card" onClick={() => window.location.href = `/watch/${featuredVideo.youtubeId}`}>
           <div className="fv-thumb">
             <div className="fv-thumb-glow"></div>
             <img src={featuredVideo.thumbnail} alt="" />
@@ -770,11 +878,11 @@ export default function DashboardPage() {
       <section className="feed-section">
         <div className="section-header-inline">
           <h2 className="section-title">Sermon Series</h2>
-          <button className="section-link" onClick={() => router.push("/watch")}>Browse All Series <i className="fas fa-chevron-right"></i></button>
+          <button className="section-link" onClick={() => window.location.href = "/watch"}>Browse All Series <i className="fas fa-chevron-right"></i></button>
         </div>
         <div className="h-scroll">
           {seriesList.map((s, i) => (
-            <div className="sc-card" key={s.id || i} onClick={() => router.push("/watch")}>
+            <div className="sc-card" key={s.id || i} onClick={() => window.location.href = "/watch"}>
               <div className="sc-cover">
                 {s.coverImage ? (
                   <img src={s.coverImage} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -798,11 +906,11 @@ export default function DashboardPage() {
       <section className="feed-section">
         <div className="section-header-inline">
           <h2 className="section-title">Latest Videos</h2>
-          <button className="section-link" onClick={() => router.push("/watch")}>See All <i className="fas fa-chevron-right"></i></button>
+          <button className="section-link" onClick={() => window.location.href = "/watch"}>See All <i className="fas fa-chevron-right"></i></button>
         </div>
         <div className="vg-grid">
           {latestVideos.slice(0, 6).map((v) => (
-            <div className="vg-card" key={v.youtubeId} onClick={() => router.push(`/watch/${v.youtubeId}`)}>
+            <div className="vg-card" key={v.youtubeId} onClick={() => window.location.href = `/watch/${v.youtubeId}`}>
               <div className="vg-thumb">
                 <img src={v.thumbnail} alt="" />
                 <div className="vg-play-icon"><i className="fas fa-play"></i></div>
@@ -833,7 +941,7 @@ export default function DashboardPage() {
             if (images.length > 0) {
               imageViewer.open(images, 0);
             } else {
-              router.push("/gallery");
+              window.location.href = "/gallery";
             }
           }}
         />
@@ -843,7 +951,7 @@ export default function DashboardPage() {
       <section className="feed-section">
         <div className="section-header-inline">
           <h2 className="section-title">Today&apos;s Broadcast Schedule</h2>
-          <button className="section-link" onClick={() => router.push("/radio")}>Full Schedule <i className="fas fa-chevron-right"></i></button>
+          <button className="section-link" onClick={() => window.location.href = "/radio"}>Full Schedule <i className="fas fa-chevron-right"></i></button>
         </div>
         <div className="schedule-today">
           {scheduleLoading ? (
@@ -872,7 +980,7 @@ export default function DashboardPage() {
       <section className="feed-section">
         <div className="section-header-inline">
           <h2 className="section-title">All Stations</h2>
-          <button className="section-link" onClick={() => router.push("/radio")}>Full Radio <i className="fas fa-chevron-right"></i></button>
+          <button className="section-link" onClick={() => window.location.href = "/radio"}>Full Radio <i className="fas fa-chevron-right"></i></button>
         </div>
         <div className="h-scroll">
           {stationsLoading ? (
@@ -889,8 +997,9 @@ export default function DashboardPage() {
                 onClick={() => {
                   if (s.id !== selectedStationId) {
                     setSelectedStationId(s.id);
-                    setEmbedVisible(true);
-                    setIsPlaying(true);
+                    // Play new station
+                    const url = s.listen_url || npData?.station?.listenUrl || "";
+                    if (url) audio.play(url, s.id);
                   } else {
                     togglePlay();
                   }
@@ -927,6 +1036,39 @@ export default function DashboardPage() {
 
   return (
     <>
+      {/* ===== INITIAL LOADING SKELETON (prevents ANR) ===== */}
+      {!contentReady && (
+        <div style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--bg, #0F0F0F)",
+          color: "#fff",
+          fontFamily: "'Inter', sans-serif",
+          flexDirection: "column",
+          gap: 16,
+        }}>
+          <div className="dh-logo" style={{
+            width: 48, height: 48, borderRadius: "50%",
+            background: "linear-gradient(135deg, #E8A838, #D4762A)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 800, color: "#fff",
+          }}>
+            <i className="fas fa-cross"></i>
+          </div>
+          <div style={{
+            width: 32, height: 32,
+            border: "3px solid #242424",
+            borderTopColor: "#E8A838",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {contentReady && <>
       <style>{`
         :root {
             --primary: #E8A838;
@@ -1158,6 +1300,98 @@ export default function DashboardPage() {
         .sc-episodes::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
 
         /* ===== PREMIUM PHOTO GALLERY ===== */
+        .pg-hero {
+            position: relative;
+            width: 100%;
+            height: 260px;
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: pointer;
+            margin-bottom: 10px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+        .pg-hero:active { transform: scale(0.98); }
+        .pg-hero-bg {
+            position: absolute;
+            inset: 0;
+        }
+        .pg-hero-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            animation: heroFadeIn 0.8s ease;
+        }
+        @keyframes heroFadeIn {
+            from { opacity: 0; transform: scale(1.08); filter: blur(6px); }
+            to { opacity: 1; transform: scale(1); filter: blur(0); }
+        }
+        .pg-hero-gradient {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.05) 100%);
+            z-index: 1;
+        }
+        .pg-hero-body {
+            position: absolute;
+            bottom: 40px;
+            left: 20px;
+            right: 20px;
+            z-index: 2;
+        }
+        .pg-hero-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--primary);
+            margin-bottom: 6px;
+            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+        }
+        .pg-hero-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.3px;
+            text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pg-hero-meta {
+            font-size: 13px;
+            color: rgba(255,255,255,0.6);
+            margin-top: 4px;
+            text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+        }
+        .pg-hero-dots {
+            position: absolute;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+            display: flex;
+            gap: 5px;
+            max-width: 80%;
+            overflow: hidden;
+        }
+        .pg-hero-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .pg-hero-dot.active {
+            width: 20px;
+            border-radius: 3px;
+            background: var(--primary);
+            box-shadow: 0 0 8px rgba(232,168,56,0.4);
+        }
+
         .pg-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -1172,10 +1406,6 @@ export default function DashboardPage() {
             background: var(--surface-elevated);
             transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
             transform: translateY(0);
-        }
-        .pg-card.hero {
-            grid-column: span 2;
-            aspect-ratio: 2/1;
         }
         .pg-card:active { transform: scale(0.97); }
         .pg-glow {
@@ -1315,14 +1545,23 @@ export default function DashboardPage() {
         .st-loading { padding: 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; gap: 8px; }
         .st-empty { padding: 20px 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
 
-        /* ===== SHOWCASE CARD ===== */
+        /* ===== SHOWCASE CARD — PREMIUM HERO ===== */
         .showcase-card {
-            border-radius: var(--radius-xl); padding: 20px;
+            border-radius: 28px; padding: 28px 24px;
             position: relative; overflow: hidden;
-            transition: all 0.4s ease;
-            animation: showcaseIn 0.5s ease;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: showcaseIn 0.6s ease;
+            min-height: 200px;
+            display: flex; flex-direction: column; justify-content: flex-end;
         }
-        @keyframes showcaseIn { from { opacity:0;transform:translateY(12px); } to { opacity:1;transform:translateY(0); } }
+        .showcase-card::before {
+            content: '';
+            position: absolute; top: -120px; left: -60px; right: -60px;
+            height: 260px;
+            background: radial-gradient(ellipse at center, rgba(232,168,56,0.15), transparent 70%);
+            pointer-events: none;
+        }
+        @keyframes showcaseIn { from { opacity:0;transform:translateY(20px); } to { opacity:1;transform:translateY(0); } }
         .showcase-bg {
             position: absolute; inset: 0;
             border-radius: inherit; border: 1px solid;
@@ -1333,40 +1572,43 @@ export default function DashboardPage() {
             pointer-events: none;
         }
         .showcase-indicator {
-            display: flex; gap: 5px; margin-bottom: 14px;
+            display: flex; gap: 6px; margin-bottom: 16px;
             position: relative; z-index: 1;
         }
         .sc-dot {
-            flex: 1; height: 3px; border-radius: 2px;
-            background: var(--border);
-            transition: all 0.3s ease; cursor: pointer;
+            flex: 1; height: 4px; border-radius: 2px;
+            background: rgba(255,255,255,0.08);
+            transition: all 0.4s ease; cursor: pointer;
         }
-        .sc-dot.active { height: 3px; }
+        .sc-dot.active { background: var(--primary); box-shadow: 0 0 12px rgba(232,168,56,0.5); }
         .showcase-body {
-            display: flex; align-items: center; gap: 16px;
+            display: flex; align-items: flex-end; gap: 18px;
             position: relative; z-index: 1;
         }
         .showcase-icon {
-            width: 56px; height: 56px; border-radius: var(--radius-lg);
+            width: 72px; height: 72px; border-radius: 22px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 24px; color: #fff; flex-shrink: 0;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            font-size: 30px; color: #fff; flex-shrink: 0;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4), 0 0 40px rgba(232,168,56,0.15);
+            transition: all 0.3s ease;
         }
+        .showcase-card:active .showcase-icon { transform: scale(0.95); }
         .showcase-info { flex: 1; min-width: 0; }
-        .showcase-name { font-size: 17px; font-weight: 800; }
-        .showcase-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .showcase-meta { display: flex; gap: 12px; margin-top: 6px; }
-        .showcase-meta span { font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 4px; }
-        .showcase-meta span i { font-size: 10px; }
+        .showcase-name { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+        .showcase-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .showcase-meta { display: flex; gap: 16px; margin-top: 8px; }
+        .showcase-meta span { font-size: 12px; color: var(--text-tertiary); display: flex; align-items: center; gap: 6px; }
+        .showcase-meta span i { font-size: 11px; }
         .showcase-tune {
-            flex-shrink: 0; padding: 10px 18px; border-radius: 24px;
-            border: none; color: #fff; font-size: 12px; font-weight: 700;
-            cursor: pointer; display: flex; align-items: center; gap: 6px;
+            flex-shrink: 0; padding: 14px 28px; border-radius: 28px;
+            border: none; color: #fff; font-size: 14px; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; gap: 8px;
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            box-shadow: var(--shadow-soft);
-            transition: all 0.2s ease; white-space: nowrap;
+            box-shadow: 0 4px 24px rgba(232,168,56,0.35);
+            transition: all 0.25s ease; white-space: nowrap;
+            letter-spacing: 0.3px;
         }
-        .showcase-tune:active { transform: scale(0.93); }
+        .showcase-tune:active { transform: scale(0.93); box-shadow: 0 2px 12px rgba(232,168,56,0.2); }
 
         /* ===== MINI BAR ===== */
         .minibar {
@@ -1554,22 +1796,7 @@ export default function DashboardPage() {
             background: linear-gradient(135deg, var(--surface-elevated), var(--surface));
             color: var(--text-tertiary); font-size: 18px;
         }
-        .rp-now-badge {
-            position: absolute; bottom: -3px; right: -3px;
-            width: 24px; height: 24px;
-            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            border-radius: 6px;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 2px 8px rgba(232,168,56,0.4);
-        }
-        .rp-eq { display: flex; align-items: flex-end; gap: 1.5px; height: 12px; }
-        .rp-eq span {
-            width: 2.5px; background: #fff; border-radius: 1px;
-            animation: eqBounce 0.6s ease-in-out infinite alternate;
-        }
-        .rp-eq span:nth-child(1) { height: 6px; animation-delay: 0s; }
-        .rp-eq span:nth-child(2) { height: 10px; animation-delay: 0.2s; }
-        .rp-eq span:nth-child(3) { height: 4px; animation-delay: 0.4s; }
+
         .rp-body { flex: 1; min-width: 0; position: relative; z-index: 1; }
         .rp-title-row { display: flex; align-items: center; gap: 8px; }
         .rp-title {
@@ -1767,13 +1994,6 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="dh-right">
-            <button className="dh-btn settings" onClick={() => router.push("/profile")}>
-              <i className="fas fa-sliders"></i>
-            </button>
-            <button className="dh-btn" onClick={() => setShowNotifications(!showNotifications)}>
-              <i className="fas fa-bell"></i>
-              <span className="badge"></span>
-            </button>
             <button className="dh-btn logout" onClick={handleLogout} title="Sign out">
               <i className="fas fa-right-from-bracket"></i>
             </button>
@@ -1803,6 +2023,7 @@ export default function DashboardPage() {
 
       {player.VideoPlayer}
       {imageViewer.ImageLightbox}
+      </>}
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
+import { apiFetch } from "@/lib/api";
 import { hapticSuccess } from "@/lib/haptics";
 import { formatBytes } from "@/lib/bunny";
 import {
@@ -16,7 +17,7 @@ import { getAlbumEntries, addAlbumEntry, updateAlbumEntry, deleteAlbumEntry } fr
 import type { AlbumEntry } from "@/lib/albumEntries";
 import { Timestamp } from "firebase/firestore";
 
-const churchId = process.env.NEXT_PUBLIC_CHURCH_ID || "kingdom_seekers_church";
+const churchId = process.env.NEXT_PUBLIC_CHURCH_ID || "turningpoint_church_nakuru";
 const categories = ["all", "events", "services", "community", "leadership", "facility"];
 const defaultAlbumTitles: Record<string, string> = {
   events: "Church Events",
@@ -197,7 +198,7 @@ export default function AdminContentPage() {
 
   // Load storage stats and data on mount
   useEffect(() => {
-    fetch("/api/content/storage-stats")
+    apiFetch("/api/content/storage-stats")
       .then((r) => r.json())
       .then((data) => setStorageUsage(data))
       .catch(() => {});
@@ -353,7 +354,7 @@ export default function AdminContentPage() {
         const itemsToDelete = galleryPhotos.filter((p) => targets.includes(p.id));
         const storagePaths = itemsToDelete.map((p) => p.storagePath).filter(Boolean);
         if (storagePaths.length > 0) {
-          await fetch("/api/content/delete", {
+          await apiFetch("/api/content/delete", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ storage_paths: storagePaths }),
@@ -368,7 +369,7 @@ export default function AdminContentPage() {
       } else if (type === "banners" && deleteTargetId) {
         const item = banners.find((b) => b.id === deleteTargetId);
         if (item?.storagePath) {
-          await fetch("/api/content/delete", {
+          await apiFetch("/api/content/delete", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ storage_paths: [item.storagePath] }),
@@ -534,7 +535,7 @@ export default function AdminContentPage() {
         fd.append("file", entryCoverFile);
         fd.append("church_id", churchId);
         fd.append("category", "gallery");
-        const res = await fetch("/api/content/upload", { method: "POST", body: fd });
+        const res = await apiFetch("/api/content/upload", { method: "POST", body: fd });
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.error || "Cover upload failed");
@@ -628,7 +629,7 @@ export default function AdminContentPage() {
     formData.append("file", file);
     formData.append("church_id", churchId);
     formData.append("category", "gallery");
-    const res = await fetch("/api/content/upload", { method: "POST", body: formData });
+    const res = await apiFetch("/api/content/upload", { method: "POST", body: formData });
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || "Upload failed");
@@ -2011,7 +2012,7 @@ export default function AdminContentPage() {
               <button className="btn-primary" onClick={async () => {
                 setShowPurgeConfirm(false);
                 try {
-                  await fetch("/api/content/storage-stats", { method: "GET" }); // trigger once to warm
+                  await apiFetch("/api/content/storage-stats", { method: "GET" }); // trigger once to warm
                   window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Cache Purged", message: "CDN cache cleared — changes will propagate within minutes", type: "success", duration: 3000 } }));
                 } catch {
                   window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to purge cache", type: "error", duration: 3000 } }));

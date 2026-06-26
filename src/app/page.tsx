@@ -317,7 +317,7 @@ export default function LoginPage() {
 
         .input-wrapper input {
             width: 100%;
-            padding: 16px 18px 16px 50px;
+            padding: 16px 54px 16px 50px;
             background: transparent;
             border: none;
             outline: none;
@@ -333,18 +333,26 @@ export default function LoginPage() {
 
         .toggle-password {
             position: absolute;
-            right: 16px;
+            right: 14px;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
-            color: var(--text-tertiary);
-            font-size: 18px;
+            color: var(--text-secondary);
+            font-size: 20px;
             cursor: pointer;
-            padding: 4px;
+            padding: 12px;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease;
+            min-width: 44px;
+            min-height: 44px;
         }
 
         .toggle-password:active { color: var(--primary); }
+        .toggle-password:hover { color: var(--text-primary); }
 
         .login-options {
             display: flex;

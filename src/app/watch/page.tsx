@@ -6,7 +6,7 @@ import BottomNavBar from "@/components/shared/BottomNavBar";
 import ToastBridge from "@/components/dashboard/ToastBridge";
 import { getVideosPage, getSeries } from "@/lib/youtube";
 import type { YouTubeVideo, YouTubeSeries } from "@/lib/youtube";
-import { getNowPlaying } from "@/lib/azuracast";
+import { getNowPlaying, getStationId } from "@/lib/azuracast";
 import type { NowPlayingData } from "@/lib/azuracast";
 import { useVideoPlayer } from "@/components/shared/VideoPlayer";
 import { useYouTubeLive } from "@/hooks/useYouTubeLive";
@@ -172,7 +172,7 @@ export default function WatchPage() {
     let cancelled = false;
     async function checkLive() {
       try {
-        const np = await getNowPlaying("1");
+        const np = await getNowPlaying(getStationId());
         if (!cancelled) {
           setRadioLive(np.live.isLive || np.nowPlaying !== null);
           setIsLive(np.live.isLive || np.nowPlaying !== null);
@@ -412,12 +412,12 @@ export default function WatchPage() {
   async function handleShare() {
     try {
       const { Share } = await import("@capacitor/share");
-      await Share.share({ title: "Kingdom Seekers Church", text: "Check out Kingdom Seekers Church", url: window.location.href });
+      await Share.share({ title: "Turningpoint Church Nakuru", text: "Check out Turningpoint Church Nakuru", url: window.location.href });
     } catch {
       if (navigator.share) {
         navigator.share({
-          title: "Kingdom Seekers Church",
-          text: "Check out Kingdom Seekers Church",
+          title: "Turningpoint Church Nakuru",
+          text: "Check out Turningpoint Church Nakuru",
           url: window.location.href,
         }).catch(() => {});
       } else {
@@ -866,7 +866,7 @@ export default function WatchPage() {
         <div className="header">
           <div className="header-logo"><i className="fas fa-video"></i></div>
           <div className="header-info">
-            <div className="header-church">Kingdom Seekers Church</div>
+            <div className="header-church">Turningpoint Church Nakuru</div>
           </div>
           <div className="header-actions">
             <button
@@ -923,7 +923,7 @@ export default function WatchPage() {
                     <div className="live-banner-title">
                       {ytLive.status.isLive
                         ? ytLive.status.video?.title
-                        : "Kingdom Seekers Church is streaming live"}
+                        : "Turningpoint Church Nakuru is streaming live"}
                     </div>
                     <div className="live-banner-meta">
                       {ytLive.status.isLive ? (

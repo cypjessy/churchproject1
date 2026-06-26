@@ -3,11 +3,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useYouTubeLive } from "@/hooks/useYouTubeLive";
+import { useAudio } from "@/lib/audio/AudioContext";
 import BottomNavBar from "@/components/shared/BottomNavBar";
 import ToastBridge from "@/components/dashboard/ToastBridge";
-import { getNowPlaying, getSongHistory, getPlaylists, getStationFiles, getSettings, getStreamers, getStations, getStationEmbedUrl } from "@/lib/azuracast";
+import { getNowPlaying, getSongHistory, getPlaylists, getStationFiles, getSettings, getStreamers, getStations, getStationEmbedUrl, getApiBase, getStationId } from "@/lib/azuracast";
 import type { NowPlayingData, SongHistoryItem, Playlist, StationFile, StationSettings, Streamer, Station } from "@/lib/azuracast";
-import SleepTimerModal from "@/components/radio/SleepTimerModal";
 import { churchConfig } from "@/lib/churchConfig";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, query, where, getDocs, orderBy, serverTimestamp, Timestamp, limit } from "firebase/firestore";
@@ -38,9 +38,45 @@ export default function RadioPage() {
 
 
   const currentStation = stations.find(s => s.id === selectedStationId);
-  const streamUrl = currentStation ? getStationEmbedUrl(currentStation) : "https://azuracast.histoview.co.ke/public/kingdom_seekers_church/embed";
-  const stationName = currentStation?.name || settings?.name || "Kingdom Seekers Radio";
+  const audio = useAudio();
+  const listenUrl = currentStation?.listen_url || npData?.station?.listenUrl || `${getApiBase()}/listen/${getStationId()}/radio.mp3`;
+  const embedUrl = currentStation ? getStationEmbedUrl(currentStation) : `${getApiBase()}/public/${getStationId()}/embed`;
+  const stationName = currentStation?.name || settings?.name || "Turningpoint Radio";
   const ytLive = useYouTubeLive();
+
+  // Push now-playing metadata to Android media notification
+  useEffect(() => {
+    if (audio.isPlaying && audio.currentStationId === selectedStationId) {
+      const np = npData?.nowPlaying;
+      const title = np?.song?.title || stationName;
+      const artist = np?.song?.artist || "Turningpoint Church Nakuru";
+      const albumArt = np?.song?.albumArt;
+      audio.updateMediaSession(title, artist, albumArt);
+    }
+  }, [audio.isPlaying, audio.currentStationId, selectedStationId, npData?.nowPlaying?.song?.title, npData?.nowPlaying?.song?.artist, npData?.nowPlaying?.song?.albumArt, audio.updateMediaSession, stationName]);
+
+  // Set next/prev station callbacks for media notification buttons
+  useEffect(() => {
+    if (stations.length < 2) return;
+    audio.setNextStationCallback(() => {
+      const curIdx = stations.findIndex(s => s.id === selectedStationId);
+      if (curIdx < 0) return;
+      const nextIdx = (curIdx + 1) % stations.length;
+      const next = stations[nextIdx];
+      const url = next.listen_url || "";
+      if (url) audio.play(url, next.id);
+      setSelectedStationId(next.id);
+    });
+    audio.setPrevStationCallback(() => {
+      const curIdx = stations.findIndex(s => s.id === selectedStationId);
+      if (curIdx < 0) return;
+      const prevIdx = (curIdx - 1 + stations.length) % stations.length;
+      const prev = stations[prevIdx];
+      const url = prev.listen_url || "";
+      if (url) audio.play(url, prev.id);
+      setSelectedStationId(prev.id);
+    });
+  }, [stations, selectedStationId, audio]);
 
   /* Poll AzuraCast now playing + history every 10 seconds */
   useEffect(() => {
@@ -145,9 +181,9 @@ export default function RadioPage() {
   const handleCopyStream = async () => {
     try {
       const { Clipboard } = await import("@capacitor/clipboard");
-      await Clipboard.write({ string: streamUrl });
+      await Clipboard.write({ string: embedUrl });
     } catch {
-      navigator.clipboard.writeText(streamUrl).catch(() => {});
+      navigator.clipboard.writeText(embedUrl).catch(() => {});
     }
     showToast("Copied!", "Stream URL copied to clipboard", "success", 2000);
   };
@@ -155,18 +191,14 @@ export default function RadioPage() {
   const handleShare = async () => {
     try {
       const { Share } = await import("@capacitor/share");
-      await Share.share({ title: `${stationName} Radio`, text: `Tune in to ${stationName} Radio!`, url: streamUrl });
+      await Share.share({ title: `${stationName} Radio`, text: `Tune in to ${stationName} Radio!`, url: embedUrl });
     } catch {
       if (navigator.share) {
-        navigator.share({ title: `${stationName} Radio`, text: `Tune in to ${stationName} Radio!`, url: streamUrl }).catch(() => {});
+        navigator.share({ title: `${stationName} Radio`, text: `Tune in to ${stationName} Radio!`, url: embedUrl }).catch(() => {});
       } else {
         handleCopyStream();
       }
     }
-  };
-
-  const handleInstall = () => {
-    showToast("Add to Home Screen", "Use your browser's menu to add this app to your home screen", "info", 4000);
   };
 
   // ========== TOAST ==========
@@ -367,33 +399,78 @@ export default function RadioPage() {
         }
         .station-listeners { font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 4px; }
 
-        /* ===== NOW PLAYING CARD (glass premium) ===== */
+        /* ===== NOW PLAYING CARD (premium hero) ===== */
         .np-glass {
-          background: linear-gradient(180deg, rgba(232,168,56,0.06) 0%, rgba(15,15,15,0) 100%);
-          border: 1px solid rgba(232,168,56,0.08);
-          border-radius: var(--radius-xl);
-          padding: 24px 20px 20px;
+          background: linear-gradient(180deg, rgba(232,168,56,0.08) 0%, rgba(15,15,15,0.4) 100%);
+          border: 1px solid rgba(232,168,56,0.12);
+          border-radius: 20px;
+          padding: 28px 22px 22px;
           position: relative; overflow: hidden;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 60px rgba(232,168,56,0.04);
         }
         .np-glass::before {
-          content: ''; position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
-          width: 300px; height: 300px;
-          background: radial-gradient(circle, rgba(232,168,56,0.06) 0%, transparent 70%);
+          content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+          width: 400px; height: 400px;
+          background: radial-gradient(circle, rgba(232,168,56,0.10) 0%, transparent 70%);
           pointer-events: none;
         }
-        .np-row { display: flex; align-items: center; gap: 16px; position: relative; z-index: 1; }
-        .np-art { width: 72px; height: 72px; border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .np-glass::after {
+          content: ''; position: absolute; bottom: -60px; right: -60px;
+          width: 200px; height: 200px;
+          background: radial-gradient(circle, rgba(212,118,42,0.06) 0%, transparent 70%);
+          pointer-events: none;
+        }
+        .np-row { display: flex; align-items: center; gap: 20px; position: relative; z-index: 1; }
+        .np-art { width: 88px; height: 88px; border-radius: 16px; overflow: hidden; flex-shrink: 0; box-shadow: 0 12px 32px rgba(0,0,0,0.5), 0 0 0 2px rgba(232,168,56,0.15); transition: transform 0.3s ease; }
+        .np-art:hover { transform: scale(1.03); }
         .np-art img { width: 100%; height: 100%; object-fit: cover; }
-        .np-art-fallback { width: 72px; height: 72px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--surface-elevated), var(--surface)); display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--text-tertiary); flex-shrink: 0; }
+        .np-art-fallback { width: 88px; height: 88px; border-radius: 16px; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; flex-shrink: 0; box-shadow: 0 12px 32px rgba(0,0,0,0.4); }
         .np-body { flex: 1; min-width: 0; }
-        .np-title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .np-artist { font-size: 13px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .np-progress { margin-top: 12px; }
-        .np-progress-bar { width: 100%; height: 3px; background: var(--surface-elevated); border-radius: 2px; overflow: hidden; }
-        .np-progress-fill { height: 100%; background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end)); border-radius: 2px; transition: width 0.5s ease; }
-        .np-progress-time { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: var(--text-tertiary); font-weight: 500; }
-        .np-embed-wrap { margin-top: 14px; position: relative; z-index: 1; }
-        .np-embed-wrap iframe { width: 100%; height: 152px; border: none; border-radius: var(--radius-md); }
+        .np-title { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .np-artist { font-size: 14px; color: var(--primary-light); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .np-progress { margin-top: 14px; }
+        .np-progress-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+        .np-progress-fill { height: 100%; background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end)); border-radius: 3px; transition: width 0.5s ease; box-shadow: 0 0 8px rgba(232,168,56,0.3); }
+        .np-progress-time { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
+        .np-controls-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; position: relative; z-index: 1; }
+        .np-play-btn {
+          width: 56px; height: 56px; border-radius: 50%;
+          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+          border: none; color: #fff; font-size: 22px;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; flex-shrink: 0;
+          box-shadow: 0 6px 24px rgba(232,168,56,0.35);
+          transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+        }
+        .np-play-btn:active { transform: scale(0.92); }
+        .np-play-btn.playing {
+          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+          box-shadow: 0 6px 28px rgba(232,168,56,0.4), 0 0 40px rgba(232,168,56,0.1);
+        }
+        .np-vol-wrap { flex: 1; display: flex; align-items: center; gap: 10px; }
+        .np-vol-wrap i { font-size: 14px; color: var(--text-tertiary); width: 16px; text-align: center; }
+        .np-vol-slider {
+          flex: 1; -webkit-appearance: none; appearance: none;
+          height: 4px; border-radius: 3px;
+          background: rgba(255,255,255,0.08);
+          outline: none; transition: background 0.2s;
+        }
+        .np-vol-slider::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none;
+          width: 18px; height: 18px; border-radius: 50%;
+          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+          cursor: pointer; box-shadow: 0 2px 8px rgba(232,168,56,0.3);
+          border: 2px solid var(--bg);
+        }
+        .np-vol-slider::-moz-range-thumb {
+          width: 18px; height: 18px; border-radius: 50%;
+          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+          cursor: pointer; box-shadow: 0 2px 8px rgba(232,168,56,0.3);
+          border: 2px solid var(--bg);
+        }
+        .np-embed-wrap { margin-top: 16px; position: relative; z-index: 1; }
+        .np-embed-wrap iframe { width: 100%; height: 120px; border: none; border-radius: var(--radius-md); opacity: 0.6; }
+        .np-bg-indicator { text-align: center; margin-top: 12px; padding: 6px 14px; background: rgba(232,168,56,0.06); border: 1px solid rgba(232,168,56,0.08); border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-tertiary); position: relative; z-index: 1; width: auto; }
 
         /* ===== LIVE DJ CARD ===== */
         .dj-glass {
@@ -445,21 +522,7 @@ export default function RadioPage() {
         .h-cover-wrap { position: relative; flex-shrink: 0; }
         .h-cover { width: 44px; height: 44px; border-radius: var(--radius-md); object-fit: cover; display: block; border: 1px solid var(--border); }
         .h-cover-fallback { width: 44px; height: 44px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--surface-elevated), var(--surface)); color: var(--text-tertiary); font-size: 18px; border: 1px solid var(--border); }
-        .h-eq {
-          position: absolute; bottom: -3px; right: -3px;
-          display: flex; align-items: flex-end; gap: 2px; height: 14px;
-          padding: 2px 3px;
-          background: rgba(74,222,128,0.9); border-radius: 4px;
-          backdrop-filter: blur(4px);
-        }
-        .h-eq span {
-          width: 2px; background: #fff; border-radius: 1px;
-          animation: hEq 0.8s ease-in-out infinite alternate;
-        }
-        .h-eq span:nth-child(1) { height: 6px; }
-        .h-eq span:nth-child(2) { height: 10px; animation-delay: 0.2s; }
-        .h-eq span:nth-child(3) { height: 8px; animation-delay: 0.4s; }
-        @keyframes hEq { from { transform: scaleY(0.4); } to { transform: scaleY(1); } }
+
         .h-info { flex: 1; min-width: 0; }
         .h-title { font-size: 14px; font-weight: 600; letter-spacing: -0.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .h-artist { font-size: 12px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -707,7 +770,7 @@ export default function RadioPage() {
               <i className="fas fa-headphones"></i> {currentListeners}
             </div>
             {ytLive.status.isLive && (
-              <div className="yt-live-indicator" onClick={() => router.push("/watch")}>
+              <div className="yt-live-indicator" onClick={() => window.location.href = "/watch"}>
                 <i className="fab fa-youtube" style={{ color: "#FF0000" }}></i> Live
               </div>
             )}
@@ -780,7 +843,7 @@ export default function RadioPage() {
                   )}
                 </div>
 
-                {/* Now Playing */}
+                {/* Now Playing — premium hero card with volume controls */}
                 <div className="np-glass">
                   <div className="np-row">
                     {np?.song?.albumArt ? (
@@ -804,14 +867,42 @@ export default function RadioPage() {
                       )}
                     </div>
                   </div>
+                  {/* Controls row: play button + volume slider */}
+                  <div className="np-controls-row">
+                    <button
+                      className={`np-play-btn${audio.isPlaying && audio.currentStationId === selectedStationId ? " playing" : ""}`}
+                      onClick={() => audio.toggle(listenUrl, selectedStationId)}
+                    >
+                      <i className={`fas fa-${audio.isPlaying && audio.currentStationId === selectedStationId ? "pause" : "play"}`} style={{ marginLeft: audio.isPlaying && audio.currentStationId === selectedStationId ? 0 : 2 }}></i>
+                    </button>
+                    <div className="np-vol-wrap">
+                      <i className={`fas fa-${audio.volume === 0 ? "volume-xmark" : audio.volume < 0.5 ? "volume-low" : "volume-high"}`}></i>
+                      <input
+                        type="range"
+                        className="np-vol-slider"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={audio.volume}
+                        onChange={(e) => audio.setVolume(parseFloat(e.target.value))}
+                      />
+                    </div>
+                  </div>
                   <div className="np-embed-wrap">
                     <iframe
-                      src={currentStation ? getStationEmbedUrl(currentStation) : "https://azuracast.histoview.co.ke/public/kingdom_seekers_church/embed"}
+                      src={embedUrl}
                       frameBorder="0"
                       title={stationName}
                       allow="autoplay *"
+                      style={{ pointerEvents: "none" }}
                     />
                   </div>
+                  {audio.isPlaying && audio.currentStationId === selectedStationId && (
+                    <div className="np-bg-indicator">
+                      <i className="fas fa-volume-high" style={{ color: "var(--primary)" }}></i>
+                      Playing in background
+                    </div>
+                  )}
                 </div>
 
                 {/* Live DJ */}
@@ -847,9 +938,7 @@ export default function RadioPage() {
                             ) : (
                               <div className="h-cover-fallback"><i className="fas fa-music"></i></div>
                             )}
-                            {i === 0 && (
-                              <div className="h-eq"><span></span><span></span><span></span></div>
-                            )}
+
                           </div>
                           <div className="h-info">
                             <div className="h-title">{item.song.title}</div>
@@ -1002,7 +1091,7 @@ export default function RadioPage() {
 
                 {/* Stream URL */}
                 <div className="about-stream-box">
-                  <span className="about-stream-text">{streamUrl}</span>
+                  <span className="about-stream-text">{embedUrl}</span>
                   <button className="about-copy-btn" onClick={handleCopyStream}>
                     <i className="fas fa-copy"></i>
                   </button>
@@ -1045,19 +1134,13 @@ export default function RadioPage() {
                   <button className="about-action-btn share" onClick={handleShare}>
                     <i className="fas fa-share-nodes"></i> Share Station
                   </button>
-                  <button className="about-action-btn install" onClick={handleInstall}>
-                    <i className="fas fa-mobile-screen"></i> Add to Home Screen
-                  </button>
-                  <button className="about-action-btn" onClick={() => {
-                    document.getElementById("timerModal")?.classList.add("active");
-                    document.body.style.overflow = "hidden";
-                  }}>
-                    <i className="fas fa-moon"></i> Sleep Timer
+                  <button className="about-action-btn" onClick={() => window.location.href = "/watch"}>
+                    <i className="fas fa-video"></i> Browse Videos
                   </button>
                 </div>
 
                 <div className="about-footer">
-                  Powered by <strong>Kingdom Seekers Church</strong> · v1.0.0
+                  Powered by <strong>Turningpoint Church Nakuru</strong> · v1.0.0
                 </div>
               </div>
             )}
@@ -1065,9 +1148,6 @@ export default function RadioPage() {
           </div>
           <div style={{ height: "16px" }}></div>
         </div>
-
-        {/* ===== SLEEP TIMER MODAL ===== */}
-        <SleepTimerModal />
 
         {/* ===== APP BOTTOM NAV ===== */}
         <BottomNavBar activeTab="radio" />

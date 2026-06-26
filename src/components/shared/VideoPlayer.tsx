@@ -146,7 +146,7 @@ export function useVideoPlayer({ videos, seriesList }: VideoPlayerDeps): VideoPl
     if (navigator.share) {
       navigator.share({
         title: selectedVideo?.title || "Grace Church",
-        text: `Watch "${selectedVideo?.title}" on Kingdom Seekers Church`,
+        text: `Watch "${selectedVideo?.title}" on Turningpoint Church Nakuru`,
         url: `https://www.youtube.com/watch?v=${selectedVideo?.youtubeId}`,
       }).catch(() => {});
     } else {

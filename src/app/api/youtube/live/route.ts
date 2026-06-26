@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-static";
+
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const BASE = "https://www.googleapis.com/youtube/v3";
 

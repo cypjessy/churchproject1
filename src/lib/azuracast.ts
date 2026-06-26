@@ -4,12 +4,18 @@
 // AZURACAST API CLIENT
 // ============================================================
 
-const STATION_ID = "1";
+export function getStationId(): string {
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_STATION_ID)
+    return process.env.NEXT_PUBLIC_STATION_ID;
+  return "";
+}
+
+const STATION_ID = getStationId();
 
 export function getApiBase(): string {
   if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_AZURACAST_URL)
     return process.env.NEXT_PUBLIC_AZURACAST_URL;
-  return "https://azuracast.histoview.co.ke";
+  return "";
 }
 
 export function getApiKey(): string {
@@ -22,7 +28,6 @@ async function apiFetch<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<{ ok: boolean; status: number; data?: T }> {
-  const base = getApiBase();
   const key = getApiKey();
   try {
     const headers: Record<string, string> = {
@@ -31,13 +36,17 @@ async function apiFetch<T>(
     };
     if (key) headers["Authorization"] = `Bearer ${key}`;
 
-    const res = await fetch(`${base}/api${endpoint}`, {
+    const res = await fetch(`/api/azuracast${endpoint}`, {
       ...options,
       headers,
       cache: "no-store",
     });
     if (!res.ok) return { ok: false, status: res.status };
-    const data = await res.json();
+    if (res.status === 204) return { ok: true, status: 204 };
+    const text = await res.text();
+    if (!text) return { ok: true, status: res.status };
+    let data: T;
+    try { data = JSON.parse(text); } catch { return { ok: true, status: res.status }; }
     return { ok: true, status: res.status, data };
   } catch (err) {
     console.warn(`[AzuraCast] ${endpoint} failed:`, err);
@@ -70,6 +79,7 @@ export interface SongHistoryItem {
 
 export interface StationFile {
   id: string;
+  unique_id: string;
   title: string;
   artist: string;
   album: string;
@@ -172,7 +182,7 @@ export interface Station {
 // ============================================================
 
 const FALLBACK_NOW_PLAYING: NowPlayingData = {
-  station: { name: "Kingdom Seekers Radio", shortName: "grace_community", isLive: false, listenUrl: "" },
+  station: { name: "Radio Station", shortName: "station", isLive: false, listenUrl: "" },
   nowPlaying: null,
   listeners: { current: 0, unique: 0, total: 0 },
   live: { isLive: false, streamerName: null },
@@ -191,14 +201,14 @@ export const MOCK_STREAMERS: Streamer[] = [];
 export const MOCK_WEBHOOKS: Webhook[] = [];
 
 const FALLBACK_SETTINGS: StationSettings = {
-  name: "Kingdom Seekers Radio",
-  streamUrl: "https://azuracast.histoview.co.ke/radio/8000/kingdom_seekers.mp3",
-  publicPageUrl: "https://faithstream.app/radio/grace",
-  autoDJ: true,
-  maxListeners: 500,
+  name: "Radio Station",
+  streamUrl: "",
+  publicPageUrl: "",
+  autoDJ: false,
+  maxListeners: 0,
   defaultBitrate: 128,
-  publicPageVisible: true,
-  mountPoint: "/grace_live",
+  publicPageVisible: false,
+  mountPoint: "/live",
 };
 
 // ============================================================
@@ -277,7 +287,7 @@ export async function getStations(): Promise<Station[]> {
 }
 
 export function getStationEmbedUrl(station: Station): string {
-  const base = (station.public_player_url || `https://azuracast.histoview.co.ke/public/${station.shortcode}`).replace(/^http:\/\//i, "https://");
+  const base = (station.public_player_url || `${getApiBase()}/public/${station.shortcode}`);
   return `${base}/embed`;
 }
 
@@ -315,22 +325,6 @@ export async function getStationStatus(
     return mapStationStatus(result.data);
   }
   return { backendRunning: false, frontendRunning: false };
-}
-
-export async function toggleStationLive(): Promise<{ isLive: boolean }> {
-  const status = await getStationStatus(STATION_ID);
-  const action = status.backendRunning ? "off" : "on";
-  const result = await apiFetch<any>(
-    `/station/${STATION_ID}/backend`,
-    {
-      method: "POST",
-      body: JSON.stringify({ action }),
-    }
-  );
-  if (result.ok) {
-    return { isLive: action === "on" };
-  }
-  return { isLive: status.backendRunning };
 }
 
 let _savedEnabledPlaylistIds: string[] | null = null;
@@ -381,6 +375,7 @@ function mapStationFile(raw: any): StationFile {
   const media = raw.media || raw;
   return {
     id: String(media.id || ""),
+    unique_id: media.unique_id || "",
     title: media.title || "",
     artist: media.artist || "",
     album: media.album || "",
@@ -399,14 +394,18 @@ function mapPlaylist(raw: any): Playlist {
     const days = [...new Set(
       (raw.schedule_items.flatMap((s: any) => s.days ?? []) as number[]).map(Number)
     )];
+    const fmtTime = (val: any): string => {
+      if (val == null) return "00:00";
+      const n = Number(val);
+      if (isNaN(n)) return String(val);
+      const h = Math.floor(n / 60);
+      const m = n % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    };
     schedule = {
       days,
-      startTime: raw.schedule_items[0]?.start_time != null
-        ? `${String(raw.schedule_items[0].start_time).padStart(2, "0")}:00`
-        : "09:00",
-      endTime: raw.schedule_items[0]?.end_time != null
-        ? `${String(raw.schedule_items[0].end_time).padStart(2, "0")}:00`
-        : "17:00",
+      startTime: fmtTime(raw.schedule_items[0]?.start_time),
+      endTime: fmtTime(raw.schedule_items[0]?.end_time),
     };
   }
   return {
@@ -430,28 +429,31 @@ export async function getStationFiles(): Promise<StationFile[]> {
   return [];
 }
 
-export async function deleteStationFiles(filePaths: string[]): Promise<void> {
-  if (filePaths.length === 0) return;
-  await apiFetch(`/station/${STATION_ID}/files/batch`, {
+export async function deleteStationFiles(filePaths: string[]): Promise<boolean> {
+  if (filePaths.length === 0) return true;
+  const result = await apiFetch(`/station/${STATION_ID}/files/batch`, {
     method: "PUT",
     body: JSON.stringify({ do: "delete", files: filePaths }),
   });
+  return result.ok;
 }
 
-export async function deleteFile(fileId: string): Promise<void> {
-  await apiFetch(`/station/${STATION_ID}/file/${fileId}`, {
+export async function deleteFile(fileId: string): Promise<boolean> {
+  const result = await apiFetch(`/station/${STATION_ID}/file/${fileId}`, {
     method: "DELETE",
   });
+  return result.ok;
 }
 
 export async function updateFileMetadata(
   fileId: string,
   data: Record<string, any>
-): Promise<void> {
-  await apiFetch(`/station/${STATION_ID}/file/${fileId}`, {
+): Promise<boolean> {
+  const result = await apiFetch(`/station/${STATION_ID}/file/${fileId}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
+  return result.ok;
 }
 
 export async function uploadFile(
@@ -469,15 +471,14 @@ export async function uploadFile(
       headers: key ? { Authorization: `Bearer ${key}` } : {},
       body: formData,
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.success) {
-        const files = await getStationFiles();
-        return files[files.length - 1] || null;
-      }
+    if (!res.ok) {
+      console.warn(`[AzuraCast] Upload failed: ${res.status} ${res.statusText}`);
+      return null;
     }
-    return null;
-  } catch {
+    const files = await getStationFiles();
+    return files[files.length - 1] || null;
+  } catch (err) {
+    console.warn(`[AzuraCast] Upload error:`, err);
     return null;
   }
 }
@@ -519,6 +520,19 @@ export async function createPlaylist(
     order: data.order || "shuffle",
     weight: data.weight ?? 10,
   };
+  if (data.type === "scheduled" && data.schedule && data.schedule.days.length > 0) {
+    const dayValues = data.schedule.days.map((d) => Number(d));
+    if (dayValues.length === 1 && dayValues[0] === 0) {
+      dayValues.push(0);
+    }
+    const [sh, sm] = data.schedule.startTime.split(":").map(Number);
+    const [eh, em] = data.schedule.endTime.split(":").map(Number);
+    body.schedule_items = [{
+      days: dayValues,
+      start_time: sh * 60 + (sm || 0),
+      end_time: eh * 60 + (em || 0),
+    }];
+  }
   const result = await apiFetch<any>(`/station/${STATION_ID}/playlists`, {
     method: "POST",
     body: JSON.stringify(body),
@@ -526,26 +540,32 @@ export async function createPlaylist(
   if (!result.ok || !result.data) {
     throw new Error("Failed to create playlist");
   }
-  if (data.type === "scheduled" && data.schedule && data.schedule.days.length > 0) {
-    const dayValues = data.schedule.days.map((d) => parseInt(String(d)));
-    if (dayValues.length === 1 && dayValues[0] === 0) {
-      dayValues.push(0);
+  const plId = result.data.id;
+  if (plId) {
+    const refreshed = await apiFetch<any>(`/station/${STATION_ID}/playlist/${plId}`);
+    if (refreshed.ok && refreshed.data) {
+      const mapped = mapPlaylist(refreshed.data);
+      if (mapped.schedule) return mapped;
     }
-    const updateResult = await apiFetch<any>(
-      `/station/${STATION_ID}/playlist/${result.data.id}`,
-      {
+    if (data.type === "scheduled" && data.schedule && data.schedule.days.length > 0) {
+      const dayValues = data.schedule.days.map((d) => Number(d));
+      if (dayValues.length === 1 && dayValues[0] === 0) dayValues.push(0);
+      const [sh, sm] = data.schedule.startTime.split(":").map(Number);
+      const [eh, em] = data.schedule.endTime.split(":").map(Number);
+      await apiFetch(`/station/${STATION_ID}/playlist/${plId}`, {
         method: "PUT",
         body: JSON.stringify({
           schedule_items: [{
             days: dayValues,
-            start_time: parseInt(data.schedule.startTime),
-            end_time: parseInt(data.schedule.endTime),
+            start_time: sh * 60 + (sm || 0),
+            end_time: eh * 60 + (em || 0),
           }],
         }),
+      });
+      const reRefreshed = await apiFetch<any>(`/station/${STATION_ID}/playlist/${plId}`);
+      if (reRefreshed.ok && reRefreshed.data) {
+        return mapPlaylist(reRefreshed.data);
       }
-    );
-    if (updateResult.ok && updateResult.data) {
-      return mapPlaylist(updateResult.data);
     }
   }
   return mapPlaylist(result.data);
@@ -579,17 +599,21 @@ export async function updatePlaylist(
   if (data.enabled !== undefined) body.is_enabled = data.enabled;
   if (data.type !== undefined) body.type = data.type === "standard" ? "default" : data.type;
   if (data.schedule !== undefined) {
-    const dayValues = data.schedule.days.map((d) => parseInt(String(d)));
+    const dayValues = data.schedule.days.map((d) => Number(d));
     if (dayValues.length === 1 && dayValues[0] === 0) {
       dayValues.push(0);
     }
-    body.schedule_items = dayValues.length > 0
-      ? [{
-          days: dayValues,
-          start_time: parseInt(data.schedule.startTime),
-          end_time: parseInt(data.schedule.endTime),
-        }]
-      : [];
+    if (dayValues.length > 0) {
+      const [sh, sm] = data.schedule.startTime.split(":").map(Number);
+      const [eh, em] = data.schedule.endTime.split(":").map(Number);
+      body.schedule_items = [{
+        days: dayValues,
+        start_time: sh * 60 + (sm || 0),
+        end_time: eh * 60 + (em || 0),
+      }];
+    } else {
+      body.schedule_items = [];
+    }
   }
   const result = await apiFetch<any>(
     `/station/${STATION_ID}/playlist/${id}`,
@@ -610,44 +634,42 @@ export async function deletePlaylist(id: string): Promise<void> {
 export async function addSongsToPlaylist(
   playlistId: string,
   songIds: string[]
-): Promise<void> {
+): Promise<boolean> {
   const plId = parseInt(playlistId);
+  let allOk = true;
   for (const songId of songIds) {
-    const fileResult = await apiFetch<any>(
-      `/station/${STATION_ID}/file/${songId}`
-    );
-    if (!fileResult.ok || !fileResult.data) continue;
-
-    const currentIds = (fileResult.data.playlists || []).map((p: any) => p.id);
-    if (!currentIds.includes(plId)) {
-      currentIds.push(plId);
-    }
-
-    await apiFetch(`/station/${STATION_ID}/file/${songId}`, {
+    const fileResult = await apiFetch<any>(`/station/${STATION_ID}/file/${songId}`);
+    if (!fileResult.ok) { allOk = false; continue; }
+    const currentIds: number[] = (fileResult.data?.playlists || []).map((p: any) => Number(p.id ?? p));
+    if (!currentIds.includes(plId)) currentIds.push(plId);
+    const putResult = await apiFetch(`/station/${STATION_ID}/file/${songId}`, {
       method: "PUT",
       body: JSON.stringify({ playlists: currentIds }),
     });
+    if (!putResult.ok) allOk = false;
   }
+  return allOk;
 }
 
 export async function removeSongFromPlaylist(
   playlistId: string,
-  songId: string
-): Promise<void> {
-  const fileResult = await apiFetch<any>(
-    `/station/${STATION_ID}/file/${songId}`
-  );
-  if (!fileResult.ok || !fileResult.data) return;
-
-  const currentIds = (fileResult.data.playlists || []).map((p: any) => p.id);
-  const newIds = currentIds.filter(
-    (id: number) => id !== parseInt(playlistId)
-  );
-
-  await apiFetch(`/station/${STATION_ID}/file/${songId}`, {
-    method: "PUT",
-    body: JSON.stringify({ playlists: newIds }),
-  });
+  songIdOrIds: string | string[]
+): Promise<boolean> {
+  const plId = parseInt(playlistId);
+  const songIds = Array.isArray(songIdOrIds) ? songIdOrIds : [songIdOrIds];
+  let allOk = true;
+  for (const songId of songIds) {
+    const fileResult = await apiFetch<any>(`/station/${STATION_ID}/file/${songId}`);
+    if (!fileResult.ok) { allOk = false; continue; }
+    const currentIds: number[] = (fileResult.data?.playlists || []).map((p: any) => Number(p.id ?? p));
+    const newIds = currentIds.filter((id: number) => id !== plId);
+    const putResult = await apiFetch(`/station/${STATION_ID}/file/${songId}`, {
+      method: "PUT",
+      body: JSON.stringify({ playlists: newIds }),
+    });
+    if (!putResult.ok) allOk = false;
+  }
+  return allOk;
 }
 
 export async function getStreamers(): Promise<Streamer[]> {
@@ -859,64 +881,5 @@ export async function updateSettings(
   throw new Error("Failed to update settings");
 }
 
-export interface StationSourceInfo {
-  sourcePassword: string;
-  sourcePort: number;
-  streamerPassword: string;
-  djPort: number;
-  djMountPoint: string;
-  mountPoint: string;
-  sourceUrl: string;
-  serverAddress: string;
-  djSourceUrl: string;
-  djServerAddress: string;
-  serverHost: string;
-}
-
-export async function getStationSourceInfo(): Promise<StationSourceInfo> {
-  const adminResult = await apiFetch<any>(`/admin/station/${STATION_ID}`);
-  const stationResult = await apiFetch<any>(`/station/${STATION_ID}`);
-
-  let sourcePassword = "changeme";
-  let streamerPassword = "changeme";
-  let sourcePort = 9100;
-  let djPort = 9105;
-  let djMountPoint = "/";
-  let mountPoint = "/radio.mp3";
-  let serverHost = "azuracast.histoview.co.ke";
-
-  if (adminResult.ok && adminResult.data) {
-    const a = adminResult.data;
-    const fc = a.frontend_config || {};
-    const bc = a.backend_config || {};
-    sourcePassword = fc.source_pw || "changeme";
-    streamerPassword = fc.streamer_pw || "changeme";
-    sourcePort = fc.port || 9100;
-    djPort = bc.dj_port || 9105;
-    djMountPoint = bc.dj_mount_point || "/";
-  }
-
-  if (stationResult.ok && stationResult.data) {
-    const s = stationResult.data;
-    mountPoint = s.mounts?.[0]?.path || "/radio.mp3";
-    if (s.listen_url) {
-      try { serverHost = new URL(s.listen_url).hostname; } catch {}
-    }
-  }
-
-  return {
-    sourcePassword,
-    sourcePort,
-    streamerPassword,
-    djPort,
-    djMountPoint,
-    mountPoint,
-    sourceUrl: `http://${serverHost}:${sourcePort}${mountPoint}`,
-    serverAddress: `${serverHost}:${sourcePort}`,
-    djSourceUrl: `http://${serverHost}:${djPort}${djMountPoint}`,
-    djServerAddress: `${serverHost}:${djPort}`,
-    serverHost,
-  };
-}
 
 

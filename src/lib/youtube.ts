@@ -134,6 +134,29 @@ export async function deleteVideo(id: string) {
   await deleteDoc(videoDoc(id));
 }
 
+export async function deleteAllYouTubeData(): Promise<{ videos: number; series: number }> {
+  // Delete all videos
+  const videoSnap = await getDocs(videosCol());
+  const videoBatch = writeBatch(db);
+  videoSnap.docs.forEach((d) => videoBatch.delete(d.ref));
+  await videoBatch.commit();
+
+  // Delete all series
+  const seriesSnap = await getDocs(seriesCol());
+  const seriesBatch = writeBatch(db);
+  seriesSnap.docs.forEach((d) => seriesBatch.delete(d.ref));
+  await seriesBatch.commit();
+
+  // Delete channel doc
+  const channelId = process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID;
+  if (channelId) await deleteDoc(channelDoc(channelId));
+
+  // Delete live doc
+  await deleteDoc(liveDoc());
+
+  return { videos: videoSnap.docs.length, series: seriesSnap.docs.length };
+}
+
 export async function getSeries(): Promise<YouTubeSeries[]> {
   const q = query(seriesCol(), orderBy("createdAt", "desc"));
   const snap = await getDocs(q);

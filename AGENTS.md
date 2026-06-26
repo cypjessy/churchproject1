@@ -24,6 +24,7 @@ Make the admin radio page fully dynamic by wiring all tabs to the real AzuraCast
 - Shared per-tab loading states (`plActionLoading`, `djActionLoading`, `whActionLoading`, `mediaActionLoading`) added for Playlists, DJs, Webhooks, and Media tabs
 - Loading spinners added to all action buttons across all tabs (create, delete, toggle, edit, save, bulk actions)
 - `toggleAutoDJ` fallback: backend POST returns 405, so it now disables all enabled playlists (pause) or restores previously-saved enabled playlists (resume) via module-level `_savedEnabledPlaylistIds`
+- Removed 5 unnecessary tabs (DJs, Schedule, Analytics, Webhooks, Settings) — sidebar, state, effects, render functions, switch cases, and CSS all removed. Only Overview, Media, Playlists remain.
 
 ### Done (Video)
 - Firestore collections `youtube_channel`, `youtube_videos`, `youtube_series` created via `src/lib/youtube.ts`
@@ -61,8 +62,8 @@ Make the admin radio page fully dynamic by wiring all tabs to the real AzuraCast
 - Firestore security rules must allow read/write for `youtube_channel`, `youtube_videos`, `youtube_series` collections for authenticated admin users
 
 ### Relevant Files
-- `src/lib/azuracast.ts`: contains `getQueue`, `togglePlaylistEnabled` (now re-fetches after toggle), `QueueItem` type, `mapPlaylist` (dedup days), `getNowPlaying`, `getStationStatus`, `getSongHistory`, `getStationSourceInfo` (fetches Icecast source password/port from `/admin/station/{id}`), `StationSourceInfo` type
-- `src/app/admin/radio/page.tsx`: Admin radio page — Play Control integrated into Overview, loading spinners on all action buttons, shared per-tab loading states, Go Live tab now shows real Icecast source URL, mount, username (`source`), and fetched source password when broadcasting
+- `src/lib/azuracast.ts`: contains `getQueue`, `togglePlaylistEnabled` (now re-fetches after toggle), `QueueItem` type, `mapPlaylist` (dedup days), `getNowPlaying`, `getStationStatus`, `getSongHistory`
+- `src/app/admin/radio/page.tsx`: Admin radio page — Play Control integrated into Overview, loading spinners on all action buttons, shared per-tab loading states, 3 tabs (Overview, Media, Playlists)
 - `src/app/api/youtube/sync/route.ts`: Server-side YouTube sync — fetches channel + playlistItems + videos from YouTube Data API, returns `{ channel, videos }`
 - `src/lib/youtube.ts`: Firestore helpers for `youtube_channel`, `youtube_videos`, `youtube_series` collections — `getVideos`, `saveVideos`, `updateVideo`, `deleteVideo`, `getChannel`, `saveChannel`, `getSeries`, `createSeries`, `updateSeries`, `deleteSeries`
 - `src/app/admin/video/page.tsx`: Admin video page — real Firestore data (channel info, video library, series management), sync-on-connect flow, all CRUD wired to Firestore, `openSeriesSafe` helper for optional series IDs

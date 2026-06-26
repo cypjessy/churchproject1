@@ -103,6 +103,42 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Gallery photos (collection named gallery_photos)
+    match /gallery_photos/{photoId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Album entries (photo entries within albums)
+    match /album_entries/{entryId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // YouTube channel info
+    match /youtube_channel/{channelId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // YouTube videos library
+    match /youtube_videos/{videoId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // YouTube sermon series
+    match /youtube_series/{seriesId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // YouTube live status (used for live broadcast detection)
+    match /youtube_live/{docId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
     // Videos (standalone — may also appear in /content)
     match /videos/{videoId} {
       allow read: if isAuth();

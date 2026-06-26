@@ -1,7 +1,6 @@
 /**
  * Church configuration — single tenant.
- * All values come from env vars with sensible defaults.
- * No Firestore dependency — this is static and bundled.
+ * All values must come from env vars. No hardcoded defaults.
  */
 
 export interface ChurchConfig {
@@ -39,46 +38,30 @@ export interface ChurchConfig {
   };
 }
 
-const CHURCH_ID =
-  process.env.NEXT_PUBLIC_CHURCH_ID || "kingdom_seekers_church";
-
 export const churchConfig: ChurchConfig = {
-  id: CHURCH_ID,
-  name:
-    process.env.NEXT_PUBLIC_CHURCH_NAME || "Kingdom Seekers Church",
-  tagline:
-    process.env.NEXT_PUBLIC_CHURCH_TAGLINE || "Worship. Word. Community.",
-  logo_url: undefined,
-  brand_color: "#E8A838",
+  id: process.env.NEXT_PUBLIC_CHURCH_ID || "",
+  name: process.env.NEXT_PUBLIC_CHURCH_NAME || "",
+  tagline: process.env.NEXT_PUBLIC_CHURCH_TAGLINE || "",
+  logo_url: process.env.NEXT_PUBLIC_CHURCH_LOGO_URL || undefined,
+  brand_color: process.env.NEXT_PUBLIC_BRAND_COLOR || "#E8A838",
 
-  azuracast_station_id: Number(
-    process.env.NEXT_PUBLIC_STATION_ID || "1"
-  ),
-  stream_url:
-    process.env.NEXT_PUBLIC_STREAM_URL ||
-    "https://azuracast.histoview.co.ke/radio/8000/kingdom_seekers.mp3",
-  azuracast_url:
-    process.env.NEXT_PUBLIC_AZURACAST_URL ||
-    "https://azuracast.histoview.co.ke",
+  azuracast_station_id: Number(process.env.NEXT_PUBLIC_STATION_ID) || 0,
+  stream_url: process.env.NEXT_PUBLIC_STREAM_URL || "",
+  azuracast_url: process.env.NEXT_PUBLIC_AZURACAST_URL || "",
 
-  youtube_channel_id: process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID,
-  bunny_cdn_url: process.env.NEXT_PUBLIC_BUNNY_CDN_URL,
+  youtube_channel_id: process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID || undefined,
+  bunny_cdn_url: process.env.NEXT_PUBLIC_BUNNY_CDN_URL || undefined,
 
-  phone: "+254712345678",
-  email: "admin@kingdomseekers.co.ke",
-  address: "Nakuru, Kenya",
+  phone: process.env.NEXT_PUBLIC_CHURCH_PHONE || "",
+  email: process.env.NEXT_PUBLIC_CHURCH_EMAIL || "",
+  address: process.env.NEXT_PUBLIC_CHURCH_ADDRESS || "",
 
-  service_times: [
-    { day: "Sunday", time: "8:00 AM", name: "Morning Service" },
-    { day: "Sunday", time: "10:30 AM", name: "Second Service" },
-    { day: "Wednesday", time: "6:30 PM", name: "Bible Study" },
-    { day: "Friday", time: "6:00 PM", name: "Prayer Meeting" },
-  ],
+  service_times: [],
 
   social: {
-    facebook_url: "",
-    youtube_url: "",
-    whatsapp_number: "",
-    instagram_url: "",
+    facebook_url: process.env.NEXT_PUBLIC_FACEBOOK_URL || "",
+    youtube_url: process.env.NEXT_PUBLIC_YOUTUBE_URL || "",
+    whatsapp_number: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "",
+    instagram_url: process.env.NEXT_PUBLIC_INSTAGRAM_URL || "",
   },
 };

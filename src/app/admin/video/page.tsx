@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
+import { apiFetch } from "@/lib/api";
 import { hapticSuccess } from "@/lib/haptics";
-import { getVideosPage, saveVideos, updateVideo, deleteVideo, getChannel, saveChannel, getSeries, createSeries, updateSeries, deleteSeries } from "@/lib/youtube";
+import { getVideosPage, saveVideos, updateVideo, deleteVideo, deleteAllYouTubeData, getChannel, saveChannel, getSeries, createSeries, updateSeries, deleteSeries } from "@/lib/youtube";
 import type { YouTubeVideo, YouTubeChannel, YouTubeSeries } from "@/lib/youtube";
 import type { DocumentSnapshot } from "firebase/firestore";
 
@@ -67,6 +68,7 @@ export default function AdminVideoPage() {
   const [defaultVisibility, setDefaultVisibility] = useState("public");
   const [defaultCategory, setDefaultCategory] = useState("sermon");
   const [featuredLimit, setFeaturedLimit] = useState(3);
+  const [clearAllLoading, setClearAllLoading] = useState(false);
 
   function showToast(title: string, message: string, type: string, duration: number) {
     window.dispatchEvent(new CustomEvent("show-toast", { detail: { title, message, type, duration } }));
@@ -150,7 +152,7 @@ export default function AdminVideoPage() {
     setSyncing(true);
     showToast("Connecting...", "Fetching YouTube channel data", "info", 3000);
     try {
-      const res = await fetch("/api/youtube/sync", { method: "POST" });
+      const res = await apiFetch("/api/youtube/sync", { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Sync failed");
@@ -180,7 +182,7 @@ export default function AdminVideoPage() {
     setSyncing(true);
     showToast("Syncing...", "Checking for new videos from YouTube", "info", 2500);
     try {
-      const res = await fetch("/api/youtube/sync", { method: "POST" });
+      const res = await apiFetch("/api/youtube/sync", { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Sync failed");
@@ -291,6 +293,24 @@ export default function AdminVideoPage() {
     } catch (e) {
       showToast("Error", "Failed to delete series", "error", 3000);
     }
+  };
+
+  const clearAllData = async () => {
+    if (!confirm("Delete all YouTube data (videos, series, channel info)? This cannot be undone.")) return;
+    setClearAllLoading(true);
+    try {
+      const { videos, series } = await deleteAllYouTubeData();
+      setVideos([]);
+      setSeriesList([]);
+      setChannel(null);
+      setIsConnected(false);
+      setLastSynced("");
+      showToast("Database Cleared", `Deleted ${videos} videos and ${series} series`, "success", 3000);
+      await hapticSuccess();
+    } catch {
+      showToast("Error", "Failed to clear database", "error", 3000);
+    }
+    setClearAllLoading(false);
   };
 
   const removeVideoFromSeries = async (seriesId: string, videoId: string) => {
@@ -409,6 +429,9 @@ export default function AdminVideoPage() {
             {syncing ? "Connecting..." : "Connect with YouTube"}
           </button>
           <p className="connect-note">Your videos remain hosted on YouTube. We only store metadata to organize and present them in your church app.</p>
+          <button onClick={() => { setIsConnected(true); setActiveTab("settings"); }} style={{ marginTop: 24, background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+            Skip — go to Settings
+          </button>
         </div>
       </>
     );
@@ -1051,6 +1074,17 @@ export default function AdminVideoPage() {
                   <label>Featured Videos Limit</label>
                   <input type="number" className="form-input" value={featuredLimit} onChange={(e) => setFeaturedLimit(parseInt(e.target.value) || 1)} min="1" max="10" />
                 </div>
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
+                <div className="st-title" style={{ marginBottom: 10, color: "var(--error)" }}>Danger Zone</div>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
+                  This will permanently delete all videos, series, and channel data from the database. You can re-sync from YouTube afterward.
+                </p>
+                <button className="btn-danger" onClick={clearAllData} disabled={clearAllLoading} style={{ width: "100%", padding: 14, fontSize: 14, fontWeight: 700, borderRadius: 12, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  {clearAllLoading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-can"></i>}
+                  {clearAllLoading ? "Clearing..." : "Clear All YouTube Data"}
+                </button>
               </div>
             </div>
           )}

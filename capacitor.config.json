@@ -1,10 +1,7 @@
 {
   "appId": "com.faithstream.app",
-  "appName": "FaithStream",
-  "server": {
-    "url": "https://churchproject1-three.vercel.app",
-    "androidScheme": "https"
-  },
+  "appName": "Turningpoint Church",
+  "webDir": "out",
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 0,

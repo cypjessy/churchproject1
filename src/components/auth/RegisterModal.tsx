@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { useAppStore } from "@/lib/useAppStore";
 
-const CHURCH_ID = process.env.NEXT_PUBLIC_CHURCH_ID || "kingdom_seekers_church";
+const CHURCH_ID = process.env.NEXT_PUBLIC_CHURCH_ID || "turningpoint_church_nakuru";
 
 export default function RegisterModal() {
   const router = useRouter();
@@ -77,7 +77,7 @@ export default function RegisterModal() {
       }
 
       closeModal();
-      showToast("Account Created!", `Welcome to Kingdom Seekers Church, ${name}! Check your email to verify your account.`, "success", 4000);
+      showToast("Account Created!", `Welcome to Turningpoint Church Nakuru, ${name}! Check your email to verify your account.`, "success", 4000);
       setTimeout(() => router.push("/dashboard"), 800);
     } catch (err: any) {
       const code = err.code;

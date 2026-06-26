@@ -1,16 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/AuthProvider";
+import { AudioProvider } from "@/lib/audio/AudioContext";
+import { BackButtonHandler } from "@/components/shared/BackButtonHandler";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kingdom Seekers Church",
+  title: "Turningpoint Church Nakuru",
   description:
-    "Kingdom Seekers Church connects you to live radio, sermons, videos, and community — anywhere, anytime.",
+    "Turningpoint Church Nakuru connects you to live radio, sermons, videos, and community — anywhere, anytime.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Kingdom Seekers Church",
+    title: "Turningpoint Church Nakuru",
   },
   icons: {
     icon: "/favicon.ico",
@@ -49,7 +51,10 @@ export default function RootLayout({
       </head>
       <body style={{ background: "#0F0F0F", margin: 0 }}>
         <AuthProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <AudioProvider>
+            <ToastProvider>{children}</ToastProvider>
+            <BackButtonHandler />
+          </AudioProvider>
         </AuthProvider>
       </body>
     </html>

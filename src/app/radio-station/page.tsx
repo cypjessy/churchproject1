@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNowPlaying } from "@/lib/useNowPlaying";
-import { getNowPlaying, toggleStationLive, toggleAutoDJ } from "@/lib/azuracast";
+import { getNowPlaying, toggleAutoDJ, getStationId } from "@/lib/azuracast";
 
 import Overview from "@/components/radio-station/sections/Overview";
-import GoLive from "@/components/radio-station/sections/GoLive";
 import Media from "@/components/radio-station/sections/Media";
 import Playlists from "@/components/radio-station/sections/Playlists";
 import DJAccounts from "@/components/radio-station/sections/DJAccounts";
@@ -14,11 +13,10 @@ import Analytics from "@/components/radio-station/sections/Analytics";
 import Webhooks from "@/components/radio-station/sections/Webhooks";
 import Settings from "@/components/radio-station/sections/Settings";
 
-type TabId = "overview" | "go-live" | "media" | "playlists" | "djs" | "schedule" | "analytics" | "webhooks" | "settings";
+type TabId = "overview" | "media" | "playlists" | "djs" | "schedule" | "analytics" | "webhooks" | "settings";
 
 const SIDEBAR_TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "overview", icon: "fa-house", label: "Overview" },
-  { id: "go-live", icon: "fa-microphone", label: "Go Live" },
   { id: "media", icon: "fa-music", label: "Media" },
   { id: "playlists", icon: "fa-list", label: "Playlists" },
   { id: "djs", icon: "fa-user", label: "DJs" },
@@ -38,7 +36,7 @@ export default function RadioStationPage() {
   const [nowPlayingArtist, setNowPlayingArtist] = useState("Chris Tomlin");
   const [activeDJ, setActiveDJ] = useState("Pastor Sarah");
 
-  const { data: npData, refetch } = useNowPlaying();
+  const { data: npData, refetch } = useNowPlaying(getStationId());
 
   // Sync state from polling
   useEffect(() => {
@@ -92,7 +90,6 @@ export default function RadioStationPage() {
     const commonProps = { showToast };
     switch (activeTab) {
       case "overview": return <Overview {...commonProps} />;
-      case "go-live": return <GoLive {...commonProps} />;
       case "media": return <Media {...commonProps} />;
       case "playlists": return <Playlists {...commonProps} />;
       case "djs": return <DJAccounts {...commonProps} />;
@@ -499,7 +496,7 @@ export default function RadioStationPage() {
           <style>{`@media(max-width:768px){#rsMobileMenuBtn{display:flex!important;}}`}</style>
           <div className="rs-header-logo"><i className="fas fa-tower-broadcast"></i></div>
           <div className="rs-header-info">
-            <div className="rs-header-name">Kingdom Seekers Radio</div>
+            <div className="rs-header-name">Turningpoint Radio</div>
           </div>
           <div className="rs-header-right">
             {activeDJ && <div className="rs-dj-name"><i className="fas fa-user"></i> {activeDJ}</div>}

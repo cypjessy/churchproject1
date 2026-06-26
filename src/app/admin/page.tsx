@@ -6,8 +6,8 @@ import { signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAppStore } from "@/lib/useAppStore";
 import { getYouTubeStats } from "@/lib/youtube";
-import { getNowPlaying as azuracastGetNowPlaying, getSongHistory, getStationStatus, getQueue, toggleAutoDJ, getStreamers, deleteStreamer, getPlaylists, getStationSourceInfo } from "@/lib/azuracast";
-import type { QueueItem, Streamer, Playlist, StationSourceInfo } from "@/lib/azuracast";
+import { getNowPlaying as azuracastGetNowPlaying, getSongHistory, getStationStatus, getQueue, toggleAutoDJ, getStreamers, deleteStreamer, getPlaylists, getStationId } from "@/lib/azuracast";
+import type { QueueItem, Streamer, Playlist } from "@/lib/azuracast";
 import { getGalleryPhotos } from "@/lib/content";
 import { getBunnyStorageStats, formatBytes } from "@/lib/bunny";
 import AlbumArt from "@/components/shared/AlbumArt";
@@ -48,7 +48,7 @@ const setupChecklistItems = [
   { id: "songs", label: "Upload your first songs", desc: "Add songs to your media library", completed: true },
   { id: "playlist", label: "Create a playlist", desc: "Organize songs into a broadcast playlist", completed: true },
   { id: "dj", label: "Add a DJ account", desc: "Create streamer accounts for live presenters", completed: false },
-  { id: "golive", label: "Go live for the first time", desc: "Start your first live broadcast", completed: false },
+  { id: "golive", label: "Go live for the first time", desc: "Start your first live broadcast", completed: true },
   { id: "photos", label: "Upload your first photos", desc: "Add photos to the gallery", completed: false },
 ];
 
@@ -97,9 +97,9 @@ export default function AdminPage() {
   const storeLogout = useAppStore((s) => s.logout);
   const storeChurchConfig = useAppStore((s) => s.churchConfig);
   const churchInfo = {
-    name: storeChurchConfig?.name || "Kingdom Seekers Church",
-    tagline: storeChurchConfig?.tagline || "Worship. Word. Community.",
-    logoInitials: (storeChurchConfig?.name || "KSC").split(" ").map((w:string) => w[0]).join("").slice(0, 3).toUpperCase(),
+    name: storeChurchConfig?.name || "Church",
+    tagline: storeChurchConfig?.tagline || "",
+    logoInitials: (storeChurchConfig?.name || "CH").split(" ").map((w:string) => w[0]).join("").slice(0, 3).toUpperCase(),
   };
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [activityFilter, setActivityFilter] = useState<string>("all");
@@ -183,8 +183,6 @@ export default function AdminPage() {
   // Schedule from AzuraCast playlists
   const [scheduleSlots, setScheduleSlots] = useState<{time: string; label: string; isNow: boolean; hasContent: boolean; source?: string}[]>([]);
 
-  // Station source info for mount URL
-  const [stationSource, setStationSource] = useState<StationSourceInfo | null>(null);
   const [stationUptime, setStationUptime] = useState("");
 
   // Content summary from Firestore
@@ -418,13 +416,6 @@ export default function AdminPage() {
     setContentLoading(false);
   }, [ytStats]);
 
-  // Fetch station source info once on mount (static data)
-  useEffect(() => {
-    getStationSourceInfo()
-      .then((src) => setStationSource(src))
-      .catch(() => {});
-  }, []);
-
   // Compute uptime from earliest song in history
   useEffect(() => {
     if (radioHistory.length > 0) {
@@ -450,9 +441,9 @@ export default function AdminPage() {
     const poll = async () => {
       try {
         const [np, history, status, queue] = await Promise.all([
-          azuracastGetNowPlaying("1").catch(() => null),
+          azuracastGetNowPlaying(getStationId()).catch(() => null),
           getSongHistory(50).catch<[]>(() => []),
-          getStationStatus("1").catch(() => ({ backendRunning: false, frontendRunning: false })),
+          getStationStatus(getStationId()).catch(() => ({ backendRunning: false, frontendRunning: false })),
           getQueue().catch<QueueItem[]>(() => []),
         ]);
         if (!mounted) return;
@@ -1525,8 +1516,8 @@ export default function AdminPage() {
                   <button className="np-btn secondary" onClick={() => window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Skip Song", message: "Skipping to next track...", type: "info", duration: 2000 } }))}>
                     <i className="fas fa-forward"></i> Skip Song
                   </button>
-                  <button className="np-btn primary" onClick={() => window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Go Live", message: "Opening live broadcast controls...", type: "info", duration: 2000 } }))}>
-                    <i className="fas fa-microphone"></i> Go Live
+                  <button className="np-btn primary" onClick={() => router.push("/admin/radio")}>
+                    <i className="fas fa-sliders"></i> Radio Settings
                   </button>
                 </div>
               </div>
@@ -1786,19 +1777,7 @@ export default function AdminPage() {
                   <i className="fas fa-clock" style={{ marginRight: 6, color: "var(--text-tertiary)" }}></i>
                   {stationUptime ? `Running for ${stationUptime}` : "No uptime data"}
                 </div>
-                {stationSource && (
-                  <div className="mount-url">
-                    <i className="fas fa-link" style={{ color: "var(--primary)", fontSize: 12 }}></i>
-                    <code>{stationSource.sourceUrl}</code>
-                    <button className="copy-btn" onClick={() => {
-                      navigator.clipboard.writeText(stationSource.sourceUrl).then(() => {
-                        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Copied", message: "Mount URL copied to clipboard", type: "success", duration: 2000 } }));
-                      });
-                    }}>
-                      <i className="fas fa-copy"></i>
-                    </button>
-                  </div>
-                )}
+
                 <div className="status-actions">
                   <button className="stat-btn restart" disabled={autoDJToggling} onClick={handleToggleAutoDJ}>
                     {autoDJToggling ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-rotate"></i>} {radioBackendRunning ? "Pause" : "Start"} AutoDJ

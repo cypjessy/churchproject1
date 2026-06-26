@@ -63,9 +63,13 @@ export default function Playlists({ showToast }: Props) {
   };
 
   const handleRemoveSong = async (plId: string, songId: string) => {
-    await removeSongFromPlaylist(plId, songId);
-    setPlaylists((prev) => prev.map((p) => p.id === plId ? { ...p, songs: p.songs.filter((s) => s !== songId), songCount: p.songCount - 1 } : p));
-    showToast("Song Removed", "Removed from playlist", "info", 1500);
+    const ok = await removeSongFromPlaylist(plId, songId);
+    if (ok) {
+      setPlaylists((prev) => prev.map((p) => p.id === plId ? { ...p, songs: p.songs.filter((s) => s !== songId), songCount: p.songCount - 1 } : p));
+      showToast("Song Removed", "Removed from playlist", "info", 1500);
+    } else {
+      showToast("Error", "Failed to remove song", "error", 3000);
+    }
   };
 
   const handleOpenSongPicker = (plId: string) => {
@@ -76,9 +80,13 @@ export default function Playlists({ showToast }: Props) {
 
   const handleAddSongs = async () => {
     if (!pickerTargetId || selectedSongs.size === 0) return;
-    await addSongsToPlaylist(pickerTargetId, Array.from(selectedSongs));
-    setPlaylists((prev) => prev.map((p) => p.id === pickerTargetId ? { ...p, songs: [...p.songs, ...Array.from(selectedSongs)], songCount: p.songCount + selectedSongs.size } : p));
-    showToast("Songs Added", `${selectedSongs.size} songs added to playlist`, "success", 2500);
+    const ok = await addSongsToPlaylist(pickerTargetId, Array.from(selectedSongs));
+    if (ok) {
+      setPlaylists((prev) => prev.map((p) => p.id === pickerTargetId ? { ...p, songs: [...p.songs, ...Array.from(selectedSongs)], songCount: p.songCount + selectedSongs.size } : p));
+      showToast("Songs Added", `${selectedSongs.size} songs added to playlist`, "success", 2500);
+    } else {
+      showToast("Error", "Failed to add songs", "error", 3000);
+    }
     setShowSongPicker(false);
     setPickerTargetId(null);
   };

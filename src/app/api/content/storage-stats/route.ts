@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getBunnyStorageStats, BUNNY_CDN_URL, formatBytes } from "@/lib/bunny";
 
+export const dynamic = "force-static";
+
 export async function GET() {
   try {
     const stats = await getBunnyStorageStats();

@@ -12,7 +12,7 @@ interface UseNowPlayingResult {
   refetch: () => void;
 }
 
-export function useNowPlaying(stationId = "1"): UseNowPlayingResult {
+export function useNowPlaying(stationId = ""): UseNowPlayingResult {
   const [data, setData] = useState<NowPlayingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);

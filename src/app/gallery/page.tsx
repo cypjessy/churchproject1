@@ -378,7 +378,7 @@ export default function GalleryPage() {
         <div className="header">
           <div className="header-logo"><i className="fas fa-images"></i></div>
           <div className="header-info">
-            <div className="header-church">Kingdom Seekers Church</div>
+            <div className="header-church">Turningpoint Church Nakuru</div>
           </div>
           <div className="header-actions">
           </div>

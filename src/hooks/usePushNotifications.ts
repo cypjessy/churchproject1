@@ -22,8 +22,14 @@ export function usePushNotifications() {
 
     registeredUid.current = user.uid;
 
+    let unsubs: (() => void)[] = [];
+
     (async () => {
       try {
+        // Only run on native Android/iOS, not in browser dev mode
+        const isNative = typeof (window as any).Capacitor !== "undefined" && (window as any).Capacitor.isNativePlatform();
+        if (!isNative) return;
+
         const { PushNotifications } = await import("@capacitor/push-notifications");
 
         const permStatus = await PushNotifications.checkPermissions();
@@ -33,7 +39,7 @@ export function usePushNotifications() {
 
         await PushNotifications.register();
 
-        PushNotifications.addListener("registration", async (token) => {
+        const unsubReg = await PushNotifications.addListener("registration", async (token) => {
           const fcmToken = token.value;
           try {
             await updateDoc(doc(db, "users", user.uid), {
@@ -42,12 +48,14 @@ export function usePushNotifications() {
             });
           } catch {}
         });
+        unsubs.push(() => { try { unsubReg.remove(); } catch {} });
 
-        PushNotifications.addListener("registrationError", () => {});
+        const unsubRegErr = await PushNotifications.addListener("registrationError", () => {});
+        unsubs.push(() => { try { unsubRegErr.remove(); } catch {} });
 
-        PushNotifications.addListener("pushNotificationReceived", (notification) => {
+        const unsubReceived = await PushNotifications.addListener("pushNotificationReceived", (notification) => {
           const data = notification.data as PushNotificationData;
-          const title = notification.title || data?.title || "Kingdom Seekers Church";
+          const title = notification.title || data?.title || "Turningpoint Church Nakuru";
           const body = notification.body || data?.body || "";
           window.dispatchEvent(
             new CustomEvent("show-toast", {
@@ -55,14 +63,22 @@ export function usePushNotifications() {
             })
           );
         });
+        unsubs.push(() => { try { unsubReceived.remove(); } catch {} });
 
-        PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+        const unsubAction = await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
           const data = action.notification.data as PushNotificationData;
           if (data?.url) {
             window.location.href = data.url;
           }
         });
-      } catch {}
+        unsubs.push(() => { try { unsubAction.remove(); } catch {} });
+      } catch {
+        // Push notifications not available — safe to ignore
+      }
     })();
+
+    return () => {
+      unsubs.forEach(fn => fn());
+    };
   }, [user, userDoc]);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getNowPlaying, toggleStationLive, toggleAutoDJ, getAnalytics, type NowPlayingData, type AnalyticsReport } from "@/lib/azuracast";
+import { getNowPlaying, toggleAutoDJ, getAnalytics, getStationId, type NowPlayingData, type AnalyticsReport } from "@/lib/azuracast";
 
 interface Props {
   showToast: (title: string, message: string, type?: "success" | "error" | "info", duration?: number) => void;
@@ -15,11 +15,11 @@ export default function Overview({ showToast }: Props) {
   const [analytics, setAnalytics] = useState<AnalyticsReport | null>(null);
 
   useEffect(() => {
-    getNowPlaying("1").then(setNpData);
+    getNowPlaying(getStationId()).then(setNpData);
     getAnalytics().then(setAnalytics);
 
     const interval = setInterval(() => {
-      getNowPlaying("1").then(setNpData);
+      getNowPlaying(getStationId()).then(setNpData);
     }, 5000);
 
     const progInterval = setInterval(() => {
@@ -31,12 +31,6 @@ export default function Overview({ showToast }: Props) {
       clearInterval(progInterval);
     };
   }, []);
-
-  const handleToggleLive = async () => {
-    const result = await toggleStationLive();
-    setIsLive(result.isLive);
-    showToast(result.isLive ? "Broadcast Started" : "Broadcast Ended", `Station is now ${result.isLive ? "live" : "offline"}`, result.isLive ? "success" : "info");
-  };
 
   const handleToggleAutoDJ = async () => {
     const result = await toggleAutoDJ();
@@ -117,10 +111,7 @@ export default function Overview({ showToast }: Props) {
           </div>
           <div className="rs-ov-card-stat">{npData?.listeners?.current || 0}</div>
           <div className="rs-ov-card-sub">Listeners</div>
-          <button className={`rs-ov-btn ${isLive ? "red" : "gold"}`} onClick={handleToggleLive}>
-            <i className={`fas ${isLive ? "fa-stop" : "fa-play"}`}></i>
-            {isLive ? "Stop Broadcast" : "Start Broadcast"}
-          </button>
+          <div className="rs-ov-card-stat" style={{ fontSize: 14, fontWeight: 600, color: "var(--rs-text-secondary)" }}>Playback Only</div>
         </div>
         <div className="rs-ov-card">
           <div className="rs-ov-card-header">
@@ -193,12 +184,6 @@ export default function Overview({ showToast }: Props) {
         <h3 className="rs-section-title" style={{ fontSize: 16 }}>Quick Actions</h3>
       </div>
       <div className="rs-ov-actions">
-        <button className="rs-ov-action-btn" onClick={() => {
-          window.dispatchEvent(new CustomEvent("rs-navigate", { detail: { tab: "go-live" } }));
-        }}>
-          <div className="rs-ov-action-icon gold"><i className="fas fa-microphone"></i></div>
-          <span>Go Live</span>
-        </button>
         <button className="rs-ov-action-btn" onClick={() => window.dispatchEvent(new CustomEvent("rs-navigate", { detail: { tab: "media" } }))}>
           <div className="rs-ov-action-icon blue"><i className="fas fa-cloud-arrow-up"></i></div>
           <span>Upload Media</span>

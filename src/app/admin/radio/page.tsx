@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import ToastBridge from "@/components/dashboard/ToastBridge";
 import {
-  getNowPlaying, getStreamers, getStationStatus, toggleAutoDJ,
+  getNowPlaying, getStationStatus, toggleAutoDJ,
   getPlaylists, createPlaylist as apiCreatePlaylist,
   togglePlaylistEnabled as apiTogglePlaylist,
   deletePlaylist as apiDeletePlaylist,
@@ -13,68 +13,26 @@ import {
   removeSongFromPlaylist as apiRemoveSong,
   getStationFiles,
   deleteStationFiles, deleteFile, updateFileMetadata, uploadFile,
-  createStreamer as apiCreateStreamer,
-  updateStreamer as apiUpdateStreamer,
-  deleteStreamer as apiDeleteStreamer,
-  getSongHistory, getListenerDetails,
-  getWebhooks as apiGetWebhooks,
-  createWebhook as apiCreateWebhook,
-  updateWebhook as apiUpdateWebhook,
-  deleteWebhook as apiDeleteWebhook,
-  toggleWebhook as apiToggleWebhook,
-  testWebhook as apiTestWebhook,
-  getSettings as apiGetSettings,
-  updateSettings as apiUpdateSettings,
+  getSongHistory,
   getQueue as apiGetQueue,
-  getStationSourceInfo,
   getApiBase,
   getApiKey,
+  getStationId,
 } from "@/lib/azuracast";
 import { hapticSuccess } from "@/lib/haptics";
-import type { Streamer, Playlist, StationFile, QueueItem, StationSourceInfo } from "@/lib/azuracast";
+import type { Playlist, StationFile, QueueItem } from "@/lib/azuracast";
 
 // ========== REFERENCE DATA ==========
 const sidebarTabs = [
   { id: "overview", icon: "fa-house", label: "Overview" },
-  { id: "go-live", icon: "fa-microphone", label: "Go Live" },
   { id: "media", icon: "fa-music", label: "Media" },
   { id: "playlists", icon: "fa-list", label: "Playlists" },
-  { id: "djs", icon: "fa-user", label: "DJs" },
-  { id: "schedule", icon: "fa-calendar-days", label: "Schedule" },
-  { id: "analytics", icon: "fa-chart-line", label: "Analytics" },
-  { id: "webhooks", icon: "fa-link", label: "Webhooks" },
-  { id: "settings", icon: "fa-gear", label: "Settings" },
 ];
 
 // ========== REFERENCE DATA ==========
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-// ========== EVENT OPTIONS ==========
-const AVAILABLE_EVENTS = [
-  { id: "song_changed", label: "Song Changed" },
-  { id: "dj_connected", label: "DJ Connected" },
-  { id: "dj_disconnected", label: "DJ Disconnected" },
-  { id: "station_online", label: "Station Online" },
-  { id: "station_offline", label: "Station Offline" },
-  { id: "listener_milestone", label: "Listener Milestone" },
-];
-
-// ========== INITIAL SETTINGS ==========
-const defaultSettings = {
-  stationName: "Kingdom Seekers Radio",
-  streamUrl: "https://azuracast.histoview.co.ke/radio/8000/kingdom_seekers.mp3",
-  publicPageUrl: "https://kingdomseekers.app/radio/grace",
-  autoDJEnabled: true,
-  maxListeners: 500,
-  defaultBitrate: "128",
-  publicPageVisible: true,
-  mountPoints: [
-    { mount: "/grace", type: "stream", listeners: 234 },
-    { mount: "/grace_live", type: "live", listeners: 42 },
-    { mount: "/grace_mobile", type: "mobile", listeners: 66 },
-  ],
-};
 export default function AdminRadioPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -99,29 +57,7 @@ export default function AdminRadioPage() {
   const [dragging, setDragging] = useState(false);
   const [playlistPickerOpen, setPlaylistPickerOpen] = useState(false);
 
-  // Go Live state
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [liveSeconds, setLiveSeconds] = useState(0);
-  const [selectedMicId, setSelectedMicId] = useState("");
-  const [streamQuality, setStreamQuality] = useState("128");
-  const [selectedStreamerId, setSelectedStreamerId] = useState("");
-  const [djName, setDjName] = useState("");
-  const [micLevel, setMicLevel] = useState(0);
-  const micLevelRef = useRef<number>(0);
-  const liveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [streamers, setStreamers] = useState<Streamer[]>([]);
-  const [stationLive, setStationLive] = useState(false);
-  const [liveListeners, setLiveListeners] = useState(0);
-  const [nowPlayingTitle, setNowPlayingTitle] = useState("");
-  const [nowPlayingArtist, setNowPlayingArtist] = useState("");
-  const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
-  const [micPermission, setMicPermission] = useState<"prompt"|"granted"|"denied">("prompt");
   const [backendRunning, setBackendRunning] = useState(false);
-  const [frontendRunning, setFrontendRunning] = useState(false);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const [sourceInfo, setSourceInfo] = useState<StationSourceInfo | null>(null);
 
   // Playlists state
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -148,31 +84,6 @@ export default function AdminRadioPage() {
   const [addSongsPlId, setAddSongsPlId] = useState<string | null>(null);
   const [showScheduleView, setShowScheduleView] = useState(false);
 
-  // DJ Accounts state
-  const [djList, setDjList] = useState<import("@/lib/azuracast").Streamer[]>([]);
-  const [showAddDJ, setShowAddDJ] = useState(false);
-  const [djForm, setDjForm] = useState({ displayName: "", username: "", password: "" });
-  const [editingDJ, setEditingDJ] = useState<string | null>(null);
-  const [expandedDJ, setExpandedDJ] = useState<string | null>(null);
-
-  // Schedule state
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [editingBlock, setEditingBlock] = useState<{ day: number; startHour: number; endHour: number; name: string; color: string; playlistId: string } | null>(null);
-  const [showAddSchedule, setShowAddSchedule] = useState(false);
-  const [schedForm, setSchedForm] = useState({ playlistId: "", days: [] as string[], startTime: "09:00", endTime: "17:00" });
-
-  // Analytics state
-  const [currentListeners, setCurrentListeners] = useState(0);
-  const [peakListeners, setPeakListeners] = useState(0);
-  const [listenerHistory, setListenerHistory] = useState<{ time: string; count: number }[]>([]);
-  const [topSongs, setTopSongs] = useState<{ title: string; artist: string; plays: number }[]>([]);
-  const [broadcastHistory, setBroadcastHistory] = useState<{ date: string; dj: string; duration: string; listeners: number }[]>([]);
-
-  // Webhooks state
-  const [webhooks, setWebhooks] = useState<import("@/lib/azuracast").Webhook[]>([]);
-  const [showAddWebhook, setShowAddWebhook] = useState(false);
-  const [whForm, setWhForm] = useState({ url: "", secretKey: "", events: [] as string[] });
-
   // Play Control state
   const [pcMode, setPcMode] = useState<"schedule" | "playlist" | "single">("schedule");
   const [pcQueue, setPcQueue] = useState<QueueItem[]>([]);
@@ -186,166 +97,11 @@ export default function AdminRadioPage() {
 
   // Shared per-tab loading states
   const [plActionLoading, setPlActionLoading] = useState(false);
-  const [djActionLoading, setDjActionLoading] = useState(false);
-  const [whActionLoading, setWhActionLoading] = useState(false);
   const [mediaActionLoading, setMediaActionLoading] = useState(false);
 
-  // Settings state
-  const [settings, setSettings] = useState(defaultSettings);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [settingsSuccess, setSettingsSuccess] = useState(false);
-
-  // Fetch settings when tab is active
+  // Fetch playlists and files when Playlists or Media tab is active
   useEffect(() => {
-    if (activeTab !== "settings") return;
-    setSettingsLoading(true);
-    setSettingsError(null);
-    Promise.all([
-      apiGetSettings(),
-      fetch(`${getApiBase()}/api/station/1/mounts`, {
-        headers: getApiKey() ? { Authorization: `Bearer ${getApiKey()}` } : {},
-      }).then((r) => r.json()).catch(() => [] as any[]),
-    ]).then(([s, mounts]) => {
-      setSettings({
-        stationName: s.name,
-        streamUrl: s.streamUrl,
-        publicPageUrl: s.publicPageUrl,
-        autoDJEnabled: s.autoDJ,
-        maxListeners: s.maxListeners,
-        defaultBitrate: String(s.defaultBitrate),
-        publicPageVisible: s.publicPageVisible,
-        mountPoints: (mounts as any[]).map((m: any) => ({
-          mount: m.name || m.path || "",
-          type: m.is_default ? "stream" : "live",
-          listeners: m.listeners?.current ?? 0,
-        })),
-      });
-      setSettingsLoading(false);
-    }).catch(() => {
-      setSettingsError("Failed to load settings");
-      setSettingsLoading(false);
-    });
-  }, [activeTab]);
-
-  const saveSettings = async () => {
-    setSettingsSaving(true);
-    setSettingsError(null);
-    setSettingsSuccess(false);
-    try {
-      const updated = await apiUpdateSettings({
-        name: settings.stationName,
-        publicPageVisible: settings.publicPageVisible,
-      });
-      setSettingsSuccess(true);
-      await hapticSuccess();
-      setTimeout(() => setSettingsSuccess(false), 3000);
-    } catch {
-      setSettingsError("Failed to save settings");
-    }
-    setSettingsSaving(false);
-  };
-
-  // Real microphone audio level from getUserMedia analyser
-  useEffect(() => {
-    if (activeTab !== "go-live") return;
-    if (!isBroadcasting) {
-      setMicLevel(0);
-      micLevelRef.current = 0;
-      return;
-    }
-    if (!micStreamRef.current) return;
-    let frame: number;
-    const animate = () => {
-      if (analyserRef.current) {
-        const data = new Uint8Array(analyserRef.current.frequencyBinCount);
-        analyserRef.current.getByteFrequencyData(data);
-        const avg = data.reduce((a, b) => a + b, 0) / data.length;
-        const pct = Math.min(100, (avg / 255) * 100);
-        micLevelRef.current = micLevelRef.current + (pct - micLevelRef.current) * 0.15;
-        setMicLevel(micLevelRef.current);
-      }
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, [isBroadcasting, activeTab]);
-
-  // Live broadcast timer
-  useEffect(() => {
-    if (isBroadcasting) {
-      liveTimerRef.current = setInterval(() => {
-        setLiveSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      if (liveTimerRef.current) {
-        clearInterval(liveTimerRef.current);
-        liveTimerRef.current = null;
-      }
-    }
-    return () => {
-      if (liveTimerRef.current) {
-        clearInterval(liveTimerRef.current);
-        liveTimerRef.current = null;
-      }
-    };
-  }, [isBroadcasting]);
-
-  // Poll AzuraCast now playing (Go Live tab only)
-  useEffect(() => {
-    if (activeTab !== "go-live") return;
-    let mounted = true;
-    const poll = async () => {
-      const np = await getNowPlaying("1");
-      if (!mounted) return;
-      setStationLive(np.station.isLive);
-      setLiveListeners(np.listeners.current);
-      setNowPlayingTitle(np.nowPlaying?.song?.title ?? "");
-      setNowPlayingArtist(np.nowPlaying?.song?.artist ?? "");
-    };
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, [activeTab]);
-
-  // Poll station backend/frontend status
-  useEffect(() => {
-    if (activeTab !== "go-live") return;
-    let mounted = true;
-    const poll = async () => {
-      const s = await getStationStatus("1");
-      if (!mounted) return;
-      setBackendRunning(s.backendRunning);
-      setFrontendRunning(s.frontendRunning);
-    };
-    poll();
-    const interval = setInterval(poll, 10000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, [activeTab]);
-
-  // Fetch streamer accounts
-  useEffect(() => {
-    if (activeTab !== "go-live") return;
-    getStreamers().then(setStreamers).catch(() => {});
-  }, [activeTab]);
-
-  // Fetch source connection info (Icecast source URL, password, port)
-  useEffect(() => {
-    if (activeTab !== "go-live") return;
-    getStationSourceInfo().then(setSourceInfo).catch(() => {});
-  }, [activeTab]);
-
-  // Fetch streamers for DJ tab
-  useEffect(() => {
-    if (activeTab !== "djs") return;
-    getStreamers().then(setDjList).catch(() => {});
-  }, [activeTab]);
-
-  // Fetch playlists and files when Playlists, Media, or Schedule tab is active
-  useEffect(() => {
-    if (activeTab !== "playlists" && activeTab !== "media" && activeTab !== "schedule") return;
+    if (activeTab !== "playlists" && activeTab !== "media") return;
     setLoadingPlaylists(activeTab === "playlists");
     Promise.all([
       getPlaylists().then(setPlaylists),
@@ -355,117 +111,14 @@ export default function AdminRadioPage() {
     });
   }, [activeTab]);
 
-  // Enumerate audio input devices
-  useEffect(() => {
-    if (activeTab !== "go-live") return;
-    navigator.mediaDevices?.enumerateDevices().then((devices) => {
-      const mics = devices.filter((d) => d.kind === "audioinput");
-      setAvailableMics(mics);
-      if (mics.length > 0 && !selectedMicId) setSelectedMicId(mics[0].deviceId);
-    }).catch(() => {});
-  }, [activeTab]);
-
-  // Request mic access when broadcasting
-  useEffect(() => {
-    if (activeTab !== "go-live" || !isBroadcasting) {
-      if (!isBroadcasting && micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((t) => t.stop());
-        micStreamRef.current = null;
-        if (audioCtxRef.current) {
-          audioCtxRef.current.close();
-          audioCtxRef.current = null;
-          analyserRef.current = null;
-        }
-      }
-      return;
-    }
-    const startMic = async () => {
-      try {
-        const constraints: MediaStreamConstraints = {
-          audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true,
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        micStreamRef.current = stream;
-        setMicPermission("granted");
-        const ctx = new AudioContext();
-        audioCtxRef.current = ctx;
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        analyserRef.current = analyser;
-        const source = ctx.createMediaStreamSource(stream);
-        source.connect(analyser);
-      } catch {
-        setMicPermission("denied");
-      }
-    };
-    startMic();
-    return () => {
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((t) => t.stop());
-        micStreamRef.current = null;
-      }
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close();
-        audioCtxRef.current = null;
-        analyserRef.current = null;
-      }
-    };
-  }, [isBroadcasting, selectedMicId, activeTab]);
-
-  // Fetch analytics data
-  useEffect(() => {
-    if (activeTab !== "analytics") return;
-    let mounted = true;
-    const fetchData = async () => {
-      const np = getNowPlaying("1");
-      const hist = getSongHistory(100);
-      const [npData, history] = await Promise.all([np, hist]);
-      if (!mounted) return;
-      const lc = npData.listeners.current;
-      setCurrentListeners(lc);
-      setPeakListeners((prev) => Math.max(prev, lc));
-      const now = new Date();
-      setListenerHistory((prev) => [...prev.slice(-47), { time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`, count: lc }]);
-      // Compute top songs from history
-      const songMap = new Map<string, { title: string; artist: string; plays: number }>();
-      for (const h of history) {
-        const key = h.song.title + "|" + h.song.artist;
-        const existing = songMap.get(key);
-        if (existing) existing.plays++;
-        else songMap.set(key, { title: h.song.title, artist: h.song.artist, plays: 1 });
-      }
-      setTopSongs(Array.from(songMap.values()).sort((a, b) => b.plays - a.plays).slice(0, 10));
-      // Broadcast history
-      const bHistory = history.slice(0, 20).map((h) => {
-        const d = h.playedAt ? new Date(h.playedAt) : new Date();
-        return {
-          date: d.toLocaleDateString(),
-          dj: h.song.artist || "AutoDJ",
-          duration: `${Math.floor(h.duration / 60)}m ${h.duration % 60}s`,
-          listeners: 0,
-        };
-      });
-      setBroadcastHistory(bHistory);
-    };
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, [activeTab]);
-
-  // Fetch webhooks when tab is active
-  useEffect(() => {
-    if (activeTab !== "webhooks") return;
-    apiGetWebhooks().then(setWebhooks).catch(() => {});
-  }, [activeTab]);
-
   // Poll overview data when tab is active
   useEffect(() => {
     if (activeTab !== "overview") return;
     setOverviewLoading(true);
     const poll = async () => {
       const [np, status, history, queue, playlists, files] = await Promise.all([
-        getNowPlaying("1").catch(() => null),
-        getStationStatus("1").catch(() => ({ backendRunning: false, frontendRunning: false })),
+        getNowPlaying(getStationId()).catch(() => null),
+        getStationStatus(getStationId()).catch(() => ({ backendRunning: false })),
         getSongHistory(5).catch(() => []),
         apiGetQueue().catch(() => []),
         getPlaylists().catch(() => []),
@@ -480,7 +133,6 @@ export default function AdminRadioPage() {
         setAutoDJ(status.backendRunning);
         setPcAutoDJ(status.backendRunning);
         setBackendRunning(status.backendRunning);
-        setFrontendRunning(status.frontendRunning);
       }
       if (history) setOverviewHistory(history);
       if (queue) setPcQueue(queue);
@@ -560,7 +212,7 @@ export default function AdminRadioPage() {
                 <span className="status-card-stat">{listeners}</span>
                 <span className="status-card-stat-label">Listeners</span>
               </div>
-              <a href={overviewNP?.station ? `https://azuracast.histoview.co.ke/public/${overviewNP.station.shortName}` : "#"}
+              <a href={overviewNP?.station ? `${getApiBase()}/public/${overviewNP.station.shortName}` : "#"}
                 target="_blank" rel="noopener noreferrer"
                 className={`broadcast-ctrl-btn ${isLive ? "stop" : "start"}`}
                 style={{ textDecoration: "none", textAlign: "center", lineHeight: "44px" }}>
@@ -636,7 +288,7 @@ export default function AdminRadioPage() {
             onClick={() => {
               setIsPlaying(!isPlaying);
               if (isPlaying) {
-                import("@capacitor/browser").then(({ Browser }) => Browser.open({ url: overviewNP?.station ? `https://azuracast.histoview.co.ke/public/${overviewNP.station.shortName}` : "#" })).catch(() => window.open(overviewNP?.station ? `https://azuracast.histoview.co.ke/public/${overviewNP.station.shortName}` : "#", "_blank"));
+                import("@capacitor/browser").then(({ Browser }) => Browser.open({ url: overviewNP?.station ? `${getApiBase()}/public/${overviewNP.station.shortName}` : "#" })).catch(() => window.open(overviewNP?.station ? `${getApiBase()}/public/${overviewNP.station.shortName}` : "#", "_blank"));
               }
             }}
             title={backendRunning ? "" : "Station is offline"}
@@ -652,10 +304,6 @@ export default function AdminRadioPage() {
             <h3>Quick Actions</h3>
           </div>
           <div className="quick-actions-row">
-            <button className="quick-action-btn" onClick={() => setActiveTab("go-live")}>
-              <div className="qab-icon gold"><i className="fas fa-microphone"></i></div>
-              <span>Go Live</span>
-            </button>
             <button className="quick-action-btn" onClick={() => setActiveTab("media")}>
               <div className="qab-icon blue"><i className="fas fa-cloud-arrow-up"></i></div>
               <span>Upload Media</span>
@@ -860,114 +508,6 @@ export default function AdminRadioPage() {
     );
   };
 
-  const [showConnInfo, setShowConnInfo] = useState(false);
-  const renderGoLive = () => (
-    <div className="go-live-content">
-      {/* On Air Status Banner */}
-      <div className={`gl-status-banner ${backendRunning ? "live" : "idle"}`}>
-        <div className="gl-status-left">
-          <span className={`gl-status-dot ${backendRunning ? "pulse-red" : ""}`}></span>
-          <div>
-            <span className="gl-status-text">
-              {backendRunning ? "Station Online" : "Station Offline"}
-            </span>
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
-              {frontendRunning ? "Icecast running" : "Icecast stopped"}
-              {backendRunning && nowPlayingTitle ? ` · ${nowPlayingArtist}` : ""}
-            </div>
-          </div>
-        </div>
-        <div className="gl-timer" style={{ color: "var(--text-secondary)" }}>
-          <i className="fas fa-headphones"></i>
-          {liveListeners} listeners
-        </div>
-      </div>
-
-      {/* Web DJ Iframe */}
-      <div className="gl-dj-frame-wrap">
-        <iframe
-          src="https://azuracast.histoview.co.ke/public/kingdom_seekers_church/dj"
-          className="gl-dj-frame"
-          allow="microphone; autoplay; fullscreen"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          title="Web DJ"
-        />
-      </div>
-
-      {/* Connection Info — collapsible */}
-      <button
-        className="gl-conn-toggle"
-        onClick={() => setShowConnInfo(!showConnInfo)}
-      >
-        <i className={`fas ${showConnInfo ? "fa-chevron-down" : "fa-chevron-right"}`}></i>
-        {showConnInfo ? "Hide" : "Show"} Connection Info
-        <span style={{ fontSize: 11, color: "var(--text-tertiary)", marginLeft: 4 }}>
-          (for external streaming apps)
-        </span>
-      </button>
-
-      {showConnInfo && (
-        <div className="gl-tech-info">
-          <div style={{ fontSize: 12, color: "var(--warning)", fontWeight: 600, marginBottom: 4 }}>
-            <i className="fas fa-exclamation-triangle"></i> Behind CloudFlare — use origin server IP
-          </div>
-          <div className="gl-tech-row">
-            <span>Method 1 — Icecast Source</span>
-            <span className="gl-tech-value" style={{ fontSize: 10 }}>port {sourceInfo?.sourcePort || 9100}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Server</span>
-            <span className="gl-tech-value">{sourceInfo?.serverHost || "azuracast.histoview.co.ke"}:{sourceInfo?.sourcePort || 9100}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Mount</span>
-            <span className="gl-tech-value">{sourceInfo?.mountPoint || "/radio.mp3"}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Username</span>
-            <span className="gl-tech-value">source</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Password</span>
-            <span className="gl-tech-value">{sourceInfo?.sourcePassword || "changeme"}</span>
-          </div>
-          <div style={{ borderTop: "1px solid var(--border)", margin: "6px 0" }} />
-          <div className="gl-tech-row">
-            <span>Method 2 — DJ Account</span>
-            <span className="gl-tech-value" style={{ fontSize: 10 }}>port {sourceInfo?.djPort || 9105}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Server</span>
-            <span className="gl-tech-value">{sourceInfo?.serverHost || "azuracast.histoview.co.ke"}:{sourceInfo?.djPort || 9105}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Mount</span>
-            <span className="gl-tech-value">{sourceInfo?.djMountPoint || "/"}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Username</span>
-            <span className="gl-tech-value">{selectedStreamerId ? (djName || "DJ username") : "select a DJ first"}</span>
-          </div>
-          <div className="gl-tech-row" style={{ paddingLeft: 12 }}>
-            <span>Password</span>
-            <span className="gl-tech-value">DJ account password</span>
-          </div>
-          <div style={{ borderTop: "1px solid var(--border)", margin: "6px 0" }} />
-          <div className="gl-tech-row">
-            <span>Quality</span>
-            <span className="gl-tech-value">{streamQuality} kbps</span>
-          </div>
-          <div className="gl-tech-row">
-            <span>Backend</span>
-            <span className="gl-tech-value" style={{ color: backendRunning ? "var(--success)" : "var(--error)" }}>
-              {backendRunning ? "Running" : "Stopped"}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
   const renderMedia = () => {
     const filteredFiles = stationFiles.filter((f) => {
       const matchesSearch =
@@ -1008,24 +548,28 @@ export default function AdminRadioPage() {
     const saveEdit = async () => {
       if (!editingFile || mediaActionLoading) return;
       setMediaActionLoading(true);
-      await updateFileMetadata(editingFile, {
+      const file = stationFiles.find((f) => f.id === editingFile);
+      const fileId = file?.unique_id || editingFile;
+      const ok = await updateFileMetadata(fileId, {
         title: editTitle,
         artist: editArtist,
         album: editAlbum,
-      }).catch(() => {});
-      setStationFiles((prev) =>
-        prev.map((f) =>
-          f.id === editingFile
-            ? { ...f, title: editTitle, artist: editArtist, album: editAlbum }
-            : f
-        )
-      );
+      });
+      if (ok) {
+        setStationFiles((prev) =>
+          prev.map((f) =>
+            f.id === editingFile
+              ? { ...f, title: editTitle, artist: editArtist, album: editAlbum }
+              : f
+          )
+        );
+      }
       window.dispatchEvent(
         new CustomEvent("show-toast", {
-          detail: { title: "Metadata Saved", message: `"${editTitle}" updated successfully`, type: "success", duration: 2500 },
+          detail: { title: ok ? "Metadata Saved" : "Error", message: ok ? `"${editTitle}" updated successfully` : "Failed to save metadata", type: ok ? "success" : "error", duration: 2500 },
         })
       );
-      await hapticSuccess();
+      if (ok) await hapticSuccess();
       setEditingFile(null);
       setMediaActionLoading(false);
     };
@@ -1039,15 +583,18 @@ export default function AdminRadioPage() {
       setMediaActionLoading(true);
       const file = stationFiles.find((f) => f.id === showMediaActions);
       if (file) {
-        await deleteFile(file.id).catch(() => {});
-        setStationFiles((prev) => prev.filter((f) => f.id !== file.id));
+        const fileId = file.unique_id || file.id;
+        const ok = await deleteFile(fileId);
+        if (ok) {
+          setStationFiles((prev) => prev.filter((f) => f.id !== file.id));
+        }
+        window.dispatchEvent(
+          new CustomEvent("show-toast", {
+            detail: { title: ok ? "File Deleted" : "Error", message: ok ? "Track removed from media library" : "Failed to delete file", type: ok ? "success" : "error", duration: 2500 },
+          })
+        );
+        if (ok) await hapticSuccess();
       }
-      window.dispatchEvent(
-        new CustomEvent("show-toast", {
-          detail: { title: "File Deleted", message: "Track removed from media library", type: "success", duration: 2500 },
-        })
-      );
-      await hapticSuccess();
       setShowMediaActions(null);
       setMediaActionLoading(false);
     };
@@ -1057,16 +604,19 @@ export default function AdminRadioPage() {
       setMediaActionLoading(true);
       const filesToDelete = stationFiles.filter((f) => selectedFileIds.has(f.id));
       const filePaths = filesToDelete.map((f) => f.path).filter(Boolean);
+      let ok = true;
       if (filePaths.length > 0) {
-        await deleteStationFiles(filePaths).catch(() => {});
+        ok = await deleteStationFiles(filePaths);
       }
-      setStationFiles((prev) => prev.filter((f) => !selectedFileIds.has(f.id)));
+      if (ok) {
+        setStationFiles((prev) => prev.filter((f) => !selectedFileIds.has(f.id)));
+      }
       window.dispatchEvent(
         new CustomEvent("show-toast", {
-          detail: { title: "Files Deleted", message: `${selectedFileIds.size} tracks removed`, type: "success", duration: 2500 },
+          detail: { title: ok ? "Files Deleted" : "Error", message: ok ? `${selectedFileIds.size} tracks removed` : "Failed to delete files", type: ok ? "success" : "error", duration: 2500 },
         })
       );
-      await hapticSuccess();
+      if (ok) await hapticSuccess();
       setSelectedFileIds(new Set());
       setMediaActionLoading(false);
     };
@@ -1080,27 +630,26 @@ export default function AdminRadioPage() {
       if (mediaActionLoading) return;
       setMediaActionLoading(true);
       const pl = playlists.find((p) => p.id === playlistId);
-      const plNumId = parseInt(playlistId);
-      for (const fid of selectedFileIds) {
+      const songIds = [...selectedFileIds].map((fid) => {
         const file = stationFiles.find((f) => f.id === fid);
-        if (!file) continue;
-        const currentIds = [...file.playlists];
-        if (!currentIds.includes(playlistId)) currentIds.push(playlistId);
-        await updateFileMetadata(fid, { playlists: currentIds.map(Number) }).catch(() => {});
+        return file?.unique_id || fid;
+      }).filter(Boolean) as string[];
+      const ok = await apiAddSongs(playlistId, songIds);
+      if (ok) {
+        setStationFiles((prev) =>
+          prev.map((f) =>
+            selectedFileIds.has(f.id)
+              ? { ...f, playlists: f.playlists.includes(playlistId) ? f.playlists : [...f.playlists, playlistId] }
+              : f
+          )
+        );
       }
-      setStationFiles((prev) =>
-        prev.map((f) =>
-          selectedFileIds.has(f.id)
-            ? { ...f, playlists: f.playlists.includes(playlistId) ? f.playlists : [...f.playlists, playlistId] }
-            : f
-        )
-      );
       window.dispatchEvent(
         new CustomEvent("show-toast", {
-          detail: { title: "Added to Playlist", message: `${selectedFileIds.size} tracks added to "${pl?.name || ""}"`, type: "success", duration: 2500 },
+          detail: { title: ok ? "Added to Playlist" : "Error", message: ok ? `${selectedFileIds.size} tracks added to "${pl?.name || ""}"` : "Failed to add tracks to playlist", type: ok ? "success" : "error", duration: 2500 },
         })
       );
-      await hapticSuccess();
+      if (ok) await hapticSuccess();
       setPlaylistPickerOpen(false);
       setSelectedFileIds(new Set());
       setMediaActionLoading(false);
@@ -1108,27 +657,48 @@ export default function AdminRadioPage() {
 
     const simulateUpload = async (files?: FileList) => {
       if (files && files.length > 0) {
+        let successCount = 0;
+        let failCount = 0;
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           const id = "upload_" + Date.now() + "_" + i;
           setUploadProgress((prev) => [...prev, { id, name: file.name, progress: 0 }]);
+          const interval = setInterval(() => {
+            setUploadProgress((prev) =>
+              prev.map((u) =>
+                u.id === id && u.progress < 90
+                  ? { ...u, progress: u.progress + Math.random() * 6 + 1 }
+                  : u
+              )
+            );
+          }, 350);
           const uploaded = await uploadFile(file).catch(() => null);
+          clearInterval(interval);
           if (uploaded) {
+            successCount++;
             setUploadProgress((prev) =>
               prev.map((u) => (u.id === id ? { ...u, progress: 100 } : u))
             );
             setStationFiles((prev) => [...prev, uploaded]);
           } else {
+            failCount++;
             setUploadProgress((prev) => prev.filter((u) => u.id !== id));
           }
         }
-        const count = files.length;
-        window.dispatchEvent(
-          new CustomEvent("show-toast", {
-            detail: { title: "Upload Complete", message: `${count} file${count > 1 ? "s" : ""} uploaded`, type: "success", duration: 3000 },
-          })
-        );
-        await hapticSuccess();
+        if (successCount > 0) {
+          window.dispatchEvent(
+            new CustomEvent("show-toast", {
+              detail: { title: "Upload Complete", message: `${successCount} file${successCount > 1 ? "s" : ""} uploaded${failCount > 0 ? `, ${failCount} failed` : ""}`, type: failCount > 0 ? "error" : "success", duration: 3000 },
+            })
+          );
+          await hapticSuccess();
+        } else {
+          window.dispatchEvent(
+            new CustomEvent("show-toast", {
+              detail: { title: "Upload Failed", message: "Could not upload files to AzuraCast", type: "error", duration: 4000 },
+            })
+          );
+        }
         return;
       }
       // Fallback: simulate upload with progress (for drag-drop without real files)
@@ -1501,13 +1071,13 @@ export default function AdminRadioPage() {
     const removeSongFromPlaylist = async (plId: string, songId: string) => {
       if (plActionLoading) return;
       setPlActionLoading(true);
-      try {
-        await apiRemoveSong(plId, songId);
+      const ok = await apiRemoveSong(plId, songId);
+      if (ok) {
         setStationFiles(stationFiles.map((f) =>
           f.id === songId ? { ...f, playlists: f.playlists.filter((p) => p !== plId) } : f
         ));
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Song Removed", message: "Song removed from playlist", type: "success", duration: 2500 } }));
-      } catch {
+      } else {
         window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to remove song", type: "error", duration: 3000 } }));
       }
       setPlActionLoading(false);
@@ -2095,770 +1665,12 @@ export default function AdminRadioPage() {
     );
   };
 
-  // ========== DJ ACCOUNTS SECTION ==========
-  const renderDJAccounts = () => {
-    const addDJ = async () => {
-      if (djActionLoading) return;
-      setDjActionLoading(true);
-      try {
-        const newDJ = await apiCreateStreamer({
-          displayName: djForm.displayName || "New DJ",
-          username: djForm.username || "new_dj",
-          password: djForm.password || "changeme",
-        });
-        setDjList([...djList, newDJ]);
-        setShowAddDJ(false);
-        setDjForm({ displayName: "", username: "", password: "" });
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "DJ Added", message: `"${newDJ.displayName}" has been added`, type: "success", duration: 2500 } }));
-        await hapticSuccess();
-      } catch {
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to create DJ account", type: "error", duration: 3000 } }));
-      }
-      setDjActionLoading(false);
-    };
-
-    const deleteDJ = async (id: string) => {
-      if (djActionLoading) return;
-      setDjActionLoading(true);
-      await apiDeleteStreamer(id).catch(() => {});
-      setDjList(djList.filter((d) => d.id !== id));
-      window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "DJ Removed", message: "Account deleted", type: "info", duration: 2500 } }));
-      await hapticSuccess();
-      setDjActionLoading(false);
-    };
-
-    const saveEditDJ = async () => {
-      if (!editingDJ || djActionLoading) return;
-      setDjActionLoading(true);
-      try {
-        const updated = await apiUpdateStreamer(editingDJ, { displayName: djForm.displayName, username: djForm.username });
-        setDjList(djList.map((d) => d.id === editingDJ ? { ...d, displayName: updated.displayName, username: updated.username } : d));
-        setEditingDJ(null);
-        setDjForm({ displayName: "", username: "", password: "" });
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "DJ Updated", message: "Credentials saved", type: "success", duration: 2500 } }));
-        await hapticSuccess();
-      } catch {
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to update DJ account", type: "error", duration: 3000 } }));
-      }
-      setDjActionLoading(false);
-    };
-
-    return (
-      <div className="dj-content">
-        <div className="dj-toolbar">
-          <button className="pl-create-btn" onClick={() => setShowAddDJ(true)}>
-            <i className="fas fa-plus"></i> Add DJ
-          </button>
-        </div>
-
-        {showAddDJ && (
-          <div className="dj-form">
-            <h4>New DJ Account</h4>
-            <div className="pl-form-row">
-              <label>Display Name</label>
-              <input type="text" className="pl-form-input" value={djForm.displayName}
-                onChange={(e) => setDjForm({ ...djForm, displayName: e.target.value })} placeholder="e.g. Pastor John" />
-            </div>
-            <div className="pl-form-row">
-              <label>Username</label>
-              <input type="text" className="pl-form-input" value={djForm.username}
-                onChange={(e) => setDjForm({ ...djForm, username: e.target.value })} placeholder="e.g. pastor_john" />
-            </div>
-            <div className="pl-form-row">
-              <label>Password</label>
-              <input type="password" className="pl-form-input" value={djForm.password}
-                onChange={(e) => setDjForm({ ...djForm, password: e.target.value })} placeholder="Enter a secure password" />
-            </div>
-            <div className="pl-form-actions">
-              <button className="pl-form-save" onClick={addDJ} disabled={djActionLoading}>
-                {djActionLoading ? <i className="fas fa-spinner fa-spin"></i> : null}
-                {djActionLoading ? " Adding..." : "Add DJ"}
-              </button>
-              <button className="pl-form-cancel" onClick={() => setShowAddDJ(false)} disabled={djActionLoading}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        <div className="pl-count">{djList.length} DJ{djList.length !== 1 ? "s" : ""}</div>
-
-        <div className="dj-list">
-          {djList.map((dj) => {
-            const isEditing = editingDJ === dj.id;
-            const isExpanded = expandedDJ === dj.id;
-            return (
-              <div className={`dj-card ${isExpanded ? "expanded" : ""}`} key={dj.id}>
-                <div className="dj-card-header" onClick={() => setExpandedDJ(isExpanded ? null : dj.id)}>
-                  <div className="dj-avatar" style={{ background: `hsl(${dj.displayName.length * 30}, 40%, 45%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 18 }}>{dj.displayName.charAt(0).toUpperCase()}</div>
-                  <div className="dj-card-info">
-                    <div className="dj-card-name">
-                      {dj.displayName}
-                      {dj.isLive && <span className="dj-live-badge"><span className="dj-live-dot"></span> Live</span>}
-                    </div>
-                    <div className="dj-card-username">@{dj.username} · Last: {dj.lastBroadcast || "Never"}</div>
-                  </div>
-                  <div className="dj-card-actions">
-                    <button className="dj-action-btn" onClick={(e) => { e.stopPropagation(); setEditingDJ(dj.id); setDjForm({ displayName: dj.displayName, username: dj.username, password: "" }); }}>
-                      <i className="fas fa-pen"></i>
-                    </button>
-                    <button className="dj-action-btn danger" onClick={(e) => { e.stopPropagation(); deleteDJ(dj.id); }} disabled={djActionLoading}>
-                      {djActionLoading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-can"></i>}
-                    </button>
-                    <i className={`fas fa-chevron-down pl-chevron ${isExpanded ? "open" : ""}`}></i>
-                  </div>
-                </div>
-
-                {isEditing && (
-                  <div className="dj-edit-form">
-                    <div className="pl-form-row">
-                      <label>Display Name</label>
-                      <input type="text" className="pl-form-input" value={djForm.displayName}
-                        onChange={(e) => setDjForm({ ...djForm, displayName: e.target.value })} />
-                    </div>
-                    <div className="pl-form-row">
-                      <label>Username</label>
-                      <input type="text" className="pl-form-input" value={djForm.username}
-                        onChange={(e) => setDjForm({ ...djForm, username: e.target.value })} />
-                    </div>
-                    <div className="pl-form-row">
-                      <label>New Password</label>
-                      <input type="password" className="pl-form-input" value={djForm.password}
-                        onChange={(e) => setDjForm({ ...djForm, password: e.target.value })} placeholder="Leave blank to keep current" />
-                    </div>
-                    <div className="pl-form-actions">
-                      <button className="pl-form-save" onClick={saveEditDJ} disabled={djActionLoading}>
-                        {djActionLoading ? <i className="fas fa-spinner fa-spin"></i> : null}
-                        {djActionLoading ? " Saving..." : "Save"}
-                      </button>
-                      <button className="pl-form-cancel" onClick={() => setEditingDJ(null)} disabled={djActionLoading}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-
-                {isExpanded && dj.broadcastHistory && dj.broadcastHistory.length > 0 && (
-                  <div className="dj-history">
-                    <div className="dj-history-title">Broadcast History</div>
-                    {dj.broadcastHistory.map((h, i) => (
-                      <div className="dj-history-item" key={i}>
-                        <span className="dj-history-date">{h.date}</span>
-                        <span className="dj-history-time">{h.startTime}</span>
-                        <span className="dj-history-duration">{h.duration}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  // ========== SCHEDULE SECTION ==========
-  const renderSchedule = () => {
-    const today = new Date().getDay();
-    const currentHour = new Date().getHours();
-    const currentMin = new Date().getMinutes();
-
-    const playlistColors = ["#E8A838","#8B5CF6","#3B82F6","#22C55E","#EF4444","#F59E0B","#EC4899","#14B8A6"];
-    const getColor = (pid: string) => playlistColors[parseInt(pid) % playlistColors.length];
-
-    type SchedBlock = { id: string; day: number; startHour: number; endHour: number; name: string; color: string; playlistId: string };
-    const scheduleBlocks: SchedBlock[] = [];
-    for (const pl of playlists) {
-      if (pl.schedule && pl.schedule.days.length > 0) {
-        const startH = parseInt(pl.schedule.startTime);
-        const endH = parseInt(pl.schedule.endTime);
-        for (const day of pl.schedule.days) {
-          scheduleBlocks.push({
-            id: pl.id + "_" + day,
-            day,
-            startHour: startH,
-            endHour: endH,
-            name: pl.name,
-            color: getColor(pl.id),
-            playlistId: pl.id,
-          });
-        }
-      }
-    }
-
-    const handleSlotClick = (day: number, hour: number) => {
-      const existing = scheduleBlocks.find((b) => b.day === day && b.startHour <= hour && b.endHour > hour);
-      if (existing) {
-        setEditingBlock(existing);
-        setShowScheduleModal(true);
-      } else {
-        setSchedForm({ playlistId: "", days: [String(day)], startTime: `${hour}:00`, endTime: `${Math.min(hour + 2, 23)}:00` });
-        setShowAddSchedule(true);
-      }
-    };
-
-    const deleteBlock = async () => {
-      if (editingBlock) {
-        await apiUpdatePlaylist(editingBlock.playlistId, { schedule: { days: [], startTime: "09:00", endTime: "17:00" } }).catch(() => {});
-        setPlaylists((prev) =>
-          prev.map((p) => p.id === editingBlock.playlistId ? { ...p, schedule: undefined } : p)
-        );
-        setShowScheduleModal(false);
-        setEditingBlock(null);
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Schedule Removed", message: `"${editingBlock.name}" schedule deleted`, type: "info", duration: 2500 } }));
-      }
-    };
-
-    const handleAddSchedule = async () => {
-      const pl = playlists.find((p) => p.id === schedForm.playlistId);
-      if (!pl) return;
-      const dayNums = schedForm.days.map(Number);
-      await apiUpdatePlaylist(pl.id, {
-        type: "scheduled",
-        schedule: { days: dayNums, startTime: schedForm.startTime, endTime: schedForm.endTime },
-      }).catch(() => {});
-      setPlaylists((prev) =>
-        prev.map((p) => p.id === pl.id ? { ...p, type: "scheduled", schedule: { days: dayNums, startTime: schedForm.startTime, endTime: schedForm.endTime } } : p)
-      );
-      setShowAddSchedule(false);
-      setSchedForm({ playlistId: "", days: [], startTime: "09:00", endTime: "17:00" });
-      window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Schedule Added", message: `"${pl.name}" scheduled`, type: "success", duration: 2500 } }));
-    };
-
-    const nonScheduled = playlists.filter((p) => p.type !== "scheduled" || !p.schedule?.days?.length);
-
-    return (
-      <div className="sched-content">
-        <div className="sched-header-info">
-          <h3>Weekly Schedule</h3>
-          <span className="section-block-count">{scheduleBlocks.length} scheduled blocks</span>
-        </div>
-
-        {/* Add Schedule Button */}
-        <div className="dj-toolbar" style={{ margin: "0 0 12px" }}>
-          <button className="pl-create-btn" onClick={() => setShowAddSchedule(true)} disabled={nonScheduled.length === 0}>
-            <i className="fas fa-plus"></i> Add Schedule
-          </button>
-        </div>
-
-        {/* Add Schedule Form */}
-        {showAddSchedule && (
-          <div className="dj-form">
-            <h4>Add Schedule Block</h4>
-            <div className="pl-form-row">
-              <label>Playlist</label>
-              <select className="pl-form-input" value={schedForm.playlistId}
-                onChange={(e) => setSchedForm({ ...schedForm, playlistId: e.target.value })}>
-                <option value="">Select a playlist...</option>
-                {nonScheduled.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="pl-form-row">
-              <label>Days of Week</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {DAYS.map((d, i) => (
-                  <label key={d} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={schedForm.days.includes(String(i))}
-                      onChange={() => setSchedForm({ ...schedForm, days: schedForm.days.includes(String(i)) ? schedForm.days.filter((x) => x !== String(i)) : [...schedForm.days, String(i)] })} />
-                    {d}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="pl-form-row" style={{ flexDirection: "row", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <label>Start Time</label>
-                <input type="time" className="pl-form-input" value={schedForm.startTime}
-                  onChange={(e) => setSchedForm({ ...schedForm, startTime: e.target.value })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label>End Time</label>
-                <input type="time" className="pl-form-input" value={schedForm.endTime}
-                  onChange={(e) => setSchedForm({ ...schedForm, endTime: e.target.value })} />
-              </div>
-            </div>
-            <div className="pl-form-actions">
-              <button className="pl-form-save" onClick={handleAddSchedule} disabled={!schedForm.playlistId}>Save</button>
-              <button className="pl-form-cancel" onClick={() => setShowAddSchedule(false)}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        <div className="sched-grid-wrapper">
-          {/* Days header */}
-          <div className="sched-grid">
-            <div className="sched-time-header">Time</div>
-            {DAYS.map((day, i) => (
-              <div className={`sched-day-header ${i === today ? "today" : ""}`} key={day}>
-                {day}
-              </div>
-            ))}
-
-            {HOURS.map((hour) => (
-              <React.Fragment key={hour}>
-                <div className="sched-time-cell">
-                  {hour === 0 ? "12am" : hour < 12 ? `${hour}am` : hour === 12 ? "12pm" : `${hour - 12}pm`}
-                </div>
-                {DAYS.map((day, dayIdx) => {
-                  const block = scheduleBlocks.find(
-                    (b) => b.day === dayIdx && b.startHour <= hour && b.endHour > hour
-                  );
-                  const isCurrentTime = dayIdx === today && hour === currentHour;
-
-                  return (
-                    <div
-                      className={`sched-cell ${dayIdx === today ? "today" : ""} ${block ? "has-block" : ""}`}
-                      key={`${day}-${hour}`}
-                      onClick={() => handleSlotClick(dayIdx, hour)}
-                    >
-                      {block ? (
-                        <div className="sched-block" style={{ background: block.color }}>
-                          {block.name}
-                        </div>
-                      ) : (
-                        <div className="sched-empty-slot"></div>
-                      )}
-                      {isCurrentTime && currentMin >= 0 && !block && (
-                        <div className="sched-now-line"></div>
-                      )}
-                    </div>
-                  );
-                })}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        <div className="sched-legend">
-          {scheduleBlocks.slice(0, 10).map((b) => (
-            <div className="sched-legend-item" key={b.id}>
-              <span className="sched-legend-dot" style={{ background: b.color }}></span>
-              <span className="sched-legend-name">{b.name}</span>
-            </div>
-          ))}
-        </div>
-
-        {showScheduleModal && editingBlock && (
-          <>
-            <div className="media-modal-overlay" onClick={() => { setShowScheduleModal(false); setEditingBlock(null); }}></div>
-            <div className="media-modal-sheet">
-              <div className="media-modal-handle"></div>
-              <div className="media-modal-header">
-                <h2>{editingBlock.name}</h2>
-                <p>{DAYS[editingBlock.day]} · {editingBlock.startHour}:00 — {editingBlock.endHour}:00</p>
-              </div>
-              <div className="media-modal-body">
-                <div className="sched-modal-actions">
-                  <button className="pl-form-save" onClick={() => { setShowScheduleModal(false); setEditingBlock(null); }}>
-                    <i className="fas fa-pen"></i> Edit Block
-                  </button>
-                  <button className="sched-delete-btn" onClick={deleteBlock}>
-                    <i className="fas fa-trash-can"></i> Remove Block
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
-  // ========== ANALYTICS SECTION ==========
-  const renderAnalytics = () => {
-    const chartData = listenerHistory.length > 0 ? listenerHistory
-      : [{ time: "No data", count: 0 }];
-    const maxChart = Math.max(...chartData.map((d) => d.count), 1);
-
-    return (
-      <div className="an-content">
-        {/* Stat Cards */}
-        <div className="an-stats-row">
-          <div className="an-stat-card">
-            <div className="an-stat-value">{currentListeners.toLocaleString()}</div>
-            <div className="an-stat-label">Current Listeners</div>
-          </div>
-          <div className="an-stat-card">
-            <div className="an-stat-value">{peakListeners.toLocaleString()}</div>
-            <div className="an-stat-label">Peak (Session)</div>
-          </div>
-        </div>
-
-        {/* Line Chart */}
-        <div className="section-block">
-          <div className="section-block-header">
-            <h3>Listeners Over Time</h3>
-          </div>
-          <div className="an-chart">
-            <div className="an-chart-bars">
-              {chartData.map((d, i) => (
-                <div className="an-chart-col" key={i} title={`${d.time}: ${d.count}`}>
-                  <div className="an-chart-bar" style={{ height: `${(d.count / maxChart) * 100}%` }}></div>
-                </div>
-              ))}
-            </div>
-            <div className="an-chart-labels">
-              {chartData.map((d, i) => (
-                <span className="an-chart-label" key={i}>{chartData.length <= 8 ? d.time : i % Math.ceil(chartData.length / 8) === 0 ? d.time : ""}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Top 10 Songs */}
-        <div className="section-block">
-          <div className="section-block-header">
-            <h3>Top Songs</h3>
-          </div>
-          <div className="an-top-songs">
-            {topSongs.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 20, color: "var(--text-tertiary)", fontSize: 13 }}>
-                No song history yet
-              </div>
-            ) : (
-              topSongs.map((song, i) => {
-                const pct = (song.plays / topSongs[0].plays) * 100;
-                return (
-                  <div className="an-top-song" key={i}>
-                    <span className="an-top-rank">{i + 1}</span>
-                    <div className="an-top-info">
-                      <div className="an-top-title">{song.title}</div>
-                      <div className="an-top-artist">{song.artist}</div>
-                    </div>
-                    <div className="an-top-bar-wrapper">
-                      <div className="an-top-bar" style={{ width: `${pct}%` }}></div>
-                    </div>
-                    <span className="an-top-plays">{song.plays}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Broadcast History */}
-        <div className="section-block">
-          <div className="section-block-header">
-            <h3>Broadcast History</h3>
-          </div>
-          <div className="history-list">
-            {broadcastHistory.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 20, color: "var(--text-tertiary)", fontSize: 13 }}>
-                No broadcast history yet
-              </div>
-            ) : (
-              broadcastHistory.map((h, i) => (
-                <div className="history-item" key={i}>
-                  <div className="history-info">
-                    <div className="history-title">{h.dj}</div>
-                    <div className="history-artist">{h.date} · {h.duration}</div>
-                  </div>
-                  <span className="history-time">{h.listeners > 0 ? `${h.listeners} listeners` : ""}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ========== WEBHOOKS SECTION ==========
-  const renderWebhooks = () => {
-    const toggleWebhook = async (id: string) => {
-      try {
-        const updated = await apiToggleWebhook(id);
-        setWebhooks(webhooks.map((w) => w.id === id ? updated : w));
-        await hapticSuccess();
-      } catch {
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to toggle webhook", type: "error", duration: 2500 } }));
-      }
-    };
-
-    const deleteWebhook = async (id: string) => {
-      if (whActionLoading) return;
-      setWhActionLoading(true);
-      await apiDeleteWebhook(id).catch(() => {});
-      setWebhooks(webhooks.filter((w) => w.id !== id));
-      window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Webhook Deleted", message: "Webhook removed", type: "info", duration: 2500 } }));
-      await hapticSuccess();
-      setWhActionLoading(false);
-    };
-
-    const addWebhook = async () => {
-      if (!whForm.url || whActionLoading) return;
-      setWhActionLoading(true);
-      try {
-        const newWh = await apiCreateWebhook({
-          url: whForm.url,
-          events: whForm.events,
-          name: "Webhook " + new Date().toLocaleDateString(),
-        });
-        setWebhooks([...webhooks, newWh]);
-        setShowAddWebhook(false);
-        setWhForm({ url: "", secretKey: "", events: [] });
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Webhook Added", message: "New endpoint configured", type: "success", duration: 2500 } }));
-        await hapticSuccess();
-      } catch {
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Error", message: "Failed to create webhook", type: "error", duration: 2500 } }));
-      }
-      setWhActionLoading(false);
-    };
-
-    const toggleWhEvent = (eventId: string) => {
-      setWhForm((prev) => ({
-        ...prev,
-        events: prev.events.includes(eventId)
-          ? prev.events.filter((e) => e !== eventId)
-          : [...prev.events, eventId],
-      }));
-    };
-
-    const testWebhookHandler = async (id: string) => {
-      const result = await apiTestWebhook(id).catch(() => ({ success: false }));
-      if (result.success) {
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Test Sent", message: "A test ping has been sent to the webhook URL", type: "success", duration: 3000 } }));
-      } else {
-        window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Test Failed", message: "Could not send test ping", type: "error", duration: 3000 } }));
-      }
-    };
-
-    return (
-      <div className="wh-content">
-        <div className="pl-toolbar">
-          <button className="pl-create-btn" onClick={() => setShowAddWebhook(true)}>
-            <i className="fas fa-plus"></i> Add Webhook
-          </button>
-        </div>
-
-        {showAddWebhook && (
-          <div className="wh-form">
-            <h4>New Webhook</h4>
-            <div className="pl-form-row">
-              <label>Endpoint URL</label>
-              <input type="url" className="pl-form-input" value={whForm.url}
-                onChange={(e) => setWhForm({ ...whForm, url: e.target.value })} placeholder="https://hooks.example.com/events" />
-            </div>
-            <div className="pl-form-row">
-              <label>Secret Key (optional)</label>
-              <input type="text" className="pl-form-input" value={whForm.secretKey}
-                onChange={(e) => setWhForm({ ...whForm, secretKey: e.target.value })} placeholder="Leave empty for no secret" />
-            </div>
-            <div className="pl-form-row">
-              <label>Events to trigger on</label>
-              <div className="wh-events-grid">
-                {AVAILABLE_EVENTS.map((ev) => (
-                  <label className="wh-event-chip" key={ev.id}>
-                    <input type="checkbox" checked={whForm.events.includes(ev.id)}
-                      onChange={() => toggleWhEvent(ev.id)} />
-                    <span className={`wh-event-label ${whForm.events.includes(ev.id) ? "checked" : ""}`}>{ev.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="pl-form-actions">
-              <button className="pl-form-save" onClick={addWebhook} disabled={whActionLoading}>
-                {whActionLoading ? <i className="fas fa-spinner fa-spin"></i> : null}
-                {whActionLoading ? " Adding..." : "Add Webhook"}
-              </button>
-              <button className="pl-form-cancel" onClick={() => setShowAddWebhook(false)} disabled={whActionLoading}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        <div className="pl-count">{webhooks.length} webhook{webhooks.length !== 1 ? "s" : ""}</div>
-
-        <div className="wh-list">
-          {webhooks.map((wh) => (
-            <div className={`wh-card ${wh.enabled ? "" : "disabled"}`} key={wh.id}>
-              <div className="wh-card-top">
-                <div className="wh-card-url">{wh.url}</div>
-                <label className="pl-toggle">
-                  <input type="checkbox" checked={wh.enabled} disabled={whActionLoading} onChange={() => toggleWebhook(wh.id)} />
-                  <span className="pl-toggle-slider"></span>
-                </label>
-              </div>
-              <div className="wh-card-events">
-                {wh.events.map((evId) => {
-                  const ev = AVAILABLE_EVENTS.find((e) => e.id === evId);
-                  return ev ? <span className="wh-event-tag" key={evId}>{ev.label}</span> : null;
-                })}
-              </div>
-              <div className="wh-card-actions">
-                <button className="wh-test-btn" onClick={() => testWebhookHandler(wh.id)} disabled={whActionLoading}>
-                  {whActionLoading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-paper-plane"></i>} Test
-                </button>
-                <button className="wh-delete-btn" onClick={() => deleteWebhook(wh.id)} disabled={whActionLoading}>
-                  {whActionLoading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-can"></i>} Delete
-                </button>
-              </div>
-              {wh.secret && (
-                <div className="wh-secret-badge">
-                  <i className="fas fa-lock"></i> Signed with secret key
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // ========== SETTINGS SECTION ==========
-  const renderSettings = () => {
-    const copyToClipboard = (text: string, field: string) => {
-      navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
-      window.dispatchEvent(new CustomEvent("show-toast", { detail: { title: "Copied", message: "Copied to clipboard", type: "success", duration: 1500 } }));
-    };
-
-    if (settingsLoading) {
-      return (
-        <div className="st-content">
-          <div className="st-loading">Loading settings...</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="st-content">
-        {settingsError && (
-          <div className="st-error-banner">
-            <i className="fas fa-circle-exclamation"></i> {settingsError}
-          </div>
-        )}
-        {settingsSuccess && (
-          <div className="st-success-banner">
-            <i className="fas fa-check-circle"></i> Settings saved successfully
-          </div>
-        )}
-
-        {/* Station Name */}
-        <div className="st-section">
-          <div className="st-section-title">Station Name</div>
-          <input type="text" className="gl-input" value={settings.stationName}
-            onChange={(e) => setSettings({ ...settings, stationName: e.target.value })} />
-        </div>
-
-        {/* URLs */}
-        <div className="st-section">
-          <div className="st-section-title">Stream URL</div>
-          <div className="st-copy-row">
-            <input type="text" className="gl-input st-copy-input" value={settings.streamUrl} readOnly />
-            <button className="st-copy-btn" onClick={() => copyToClipboard(settings.streamUrl, "stream")}>
-              <i className={`fas ${copiedField === "stream" ? "fa-check" : "fa-copy"}`}></i>
-            </button>
-          </div>
-        </div>
-
-        <div className="st-section">
-          <div className="st-section-title">Public Page URL</div>
-          <div className="st-copy-row">
-            <input type="text" className="gl-input st-copy-input" value={settings.publicPageUrl} readOnly />
-            <button className="st-copy-btn" onClick={() => copyToClipboard(settings.publicPageUrl, "public")}>
-              <i className={`fas ${copiedField === "public" ? "fa-check" : "fa-copy"}`}></i>
-            </button>
-          </div>
-        </div>
-
-        {/* Toggles */}
-        <div className="st-toggle-row">
-          <div className="st-toggle-info">
-            <div className="st-toggle-title">AutoDJ</div>
-            <div className="st-toggle-desc">AutoDJ fills gaps when no DJ is broadcasting</div>
-          </div>
-          <label className="pl-toggle">
-            <input type="checkbox" checked={settings.autoDJEnabled}
-              onChange={() => {
-                const newVal = !settings.autoDJEnabled;
-                setSettings({ ...settings, autoDJEnabled: newVal });
-                toggleAutoDJ().catch(() => setSettings({ ...settings, autoDJEnabled: !newVal }));
-              }} />
-            <span className="pl-toggle-slider"></span>
-          </label>
-        </div>
-
-        <div className="st-toggle-row">
-          <div className="st-toggle-info">
-            <div className="st-toggle-title">Public Page Visibility</div>
-            <div className="st-toggle-desc">Allow the station page to appear in search results</div>
-          </div>
-          <label className="pl-toggle">
-            <input type="checkbox" checked={settings.publicPageVisible}
-              onChange={() => setSettings({ ...settings, publicPageVisible: !settings.publicPageVisible })} />
-            <span className="pl-toggle-slider"></span>
-          </label>
-        </div>
-
-        {/* Max Listeners */}
-        <div className="st-section">
-          <div className="st-section-title">Max Listeners</div>
-          <input type="number" className="gl-input" value={settings.maxListeners}
-            onChange={(e) => setSettings({ ...settings, maxListeners: parseInt(e.target.value) || 0 })} />
-        </div>
-
-        {/* Default Bitrate */}
-        <div className="st-section">
-          <div className="st-section-title">Default Stream Bitrate</div>
-          <div className="gl-quality-options">
-            {["64", "128", "192", "320"].map((q) => (
-              <button key={q} className={`gl-quality-btn ${settings.defaultBitrate === q ? "active" : ""}`}
-                onClick={() => setSettings({ ...settings, defaultBitrate: q })}>{q} kbps</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Mount Points */}
-        <div className="st-section">
-          <div className="st-section-title">Mount Points</div>
-          <div className="st-mount-list">
-            {settings.mountPoints.length === 0 ? (
-              <div className="st-mount-empty">No mount points found</div>
-            ) : (
-              settings.mountPoints.map((mp, i) => (
-                <div className="st-mount-item" key={i}>
-                  <div className="st-mount-info">
-                    <span className="st-mount-path">{mp.mount}</span>
-                    <span className={`st-mount-type ${mp.type}`}>{mp.type}</span>
-                  </div>
-                  <span className="st-mount-listeners">{mp.listeners} listeners</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Save Button */}
-        <button className="st-save-btn" onClick={saveSettings} disabled={settingsSaving}>
-          <i className={`fas ${settingsSaving ? "fa-spinner fa-spin" : "fa-floppy-disk"}`}></i>
-          {settingsSaving ? " Saving..." : " Save Settings"}
-        </button>
-
-        {/* Danger Zone */}
-        <div className="st-danger">
-          <div className="st-danger-title">Danger Zone</div>
-          <p>Resetting or deleting the station is permanent and cannot be undone.</p>
-          <button className="st-danger-btn">
-            <i className="fas fa-triangle-exclamation"></i> Reset Station
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   // ========== PLAY CONTROL SECTION ==========
   const renderContent = () => {
     switch (activeTab) {
       case "overview": return renderOverview();
-      case "go-live": return renderGoLive();
       case "media": return renderMedia();
       case "playlists": return renderPlaylists();
-      case "djs": return renderDJAccounts();
-      case "schedule": return renderSchedule();
-      case "analytics": return renderAnalytics();
-      case "webhooks": return renderWebhooks();
-
-      case "settings": return renderSettings();
       default: return renderOverview();
     }
   };
@@ -3234,178 +2046,6 @@ export default function AdminRadioPage() {
         .ov-pc-q-info { flex: 1; min-width: 0; }
         .ov-pc-q-title { font-size: 12px; font-weight: 600; }
         .ov-pc-q-artist { font-size: 10px; color: var(--text-tertiary); }
-
-        /* ========== GO LIVE SECTION ========== */
-        .go-live-content { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-
-        .gl-dj-frame-wrap {
-          width: 100%; height: 420px; border-radius: var(--radius-lg);
-          overflow: hidden; border: 1px solid var(--border);
-          background: var(--surface-card);
-        }
-        .gl-dj-frame {
-          width: 100%; height: 100%; border: none;
-        }
-        .gl-conn-toggle {
-          display: flex; align-items: center; gap: 6px;
-          padding: 10px 16px; border-radius: var(--radius-md);
-          border: 1px solid var(--border); background: var(--surface-card);
-          color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer;
-          transition: all 0.2s ease; width: 100%;
-        }
-        .gl-conn-toggle:hover { border-color: var(--primary); color: var(--text-primary); }
-
-        .gl-status-banner {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 18px; border-radius: var(--radius-lg);
-          border: 1px solid var(--border);
-        }
-        .gl-status-banner.live {
-          background: linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.04));
-          border-color: rgba(239,68,68,0.2);
-        }
-        .gl-status-banner.idle {
-          background: var(--surface-card);
-        }
-        .gl-status-left { display: flex; align-items: center; gap: 10px; }
-        .gl-status-dot {
-          width: 10px; height: 10px; border-radius: var(--radius-full);
-          background: var(--text-tertiary);
-        }
-        .gl-status-dot.pulse-red {
-          background: var(--error);
-          animation: livePulse 1.5s ease-in-out infinite;
-          box-shadow: 0 0 12px rgba(239,68,68,0.4);
-        }
-        .gl-status-text { font-size: 15px; font-weight: 700; }
-
-        .gl-timer {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;
-          color: var(--error);
-        }
-        .gl-timer i { font-size: 12px; }
-
-        .gl-section { display: flex; flex-direction: column; gap: 8px; }
-        .gl-section-label {
-          font-size: 12px; font-weight: 600; color: var(--text-secondary);
-          text-transform: uppercase; letter-spacing: 0.5px;
-          display: flex; align-items: center; gap: 6px;
-        }
-        .gl-section-label i { font-size: 11px; color: var(--text-tertiary); }
-
-        .gl-now-playing {
-          background: var(--surface-card); border: 1px solid var(--border);
-          border-radius: var(--radius-md); padding: 14px 16px;
-        }
-        .gl-np-title { font-size: 15px; font-weight: 700; display: block; margin-bottom: 2px; }
-        .gl-np-artist { font-size: 13px; color: var(--text-secondary); }
-
-        .gl-select {
-          width: 100%; padding: 14px 16px;
-          background: var(--surface-card); border: 1.5px solid var(--border);
-          border-radius: var(--radius-md); color: var(--text-primary);
-          font-size: 15px; font-weight: 500; outline: none;
-          appearance: none; -webkit-appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%236B6B6B' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
-          background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px;
-        }
-        .gl-select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(232,168,56,0.08); }
-        .gl-select:disabled { opacity: 0.5; }
-
-        .gl-input {
-          width: 100%; padding: 14px 16px;
-          background: var(--surface-card); border: 1.5px solid var(--border);
-          border-radius: var(--radius-md); color: var(--text-primary);
-          font-size: 15px; font-weight: 500; outline: none;
-        }
-        .gl-input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(232,168,56,0.08); }
-        .gl-input::placeholder { color: var(--text-tertiary); font-weight: 400; }
-        .gl-input:disabled { opacity: 0.5; }
-
-        /* Audio Level Meter */
-        .gl-level-meter {
-          display: flex; align-items: flex-end; gap: 3px;
-          height: 48px; background: var(--surface-card);
-          border: 1px solid var(--border); border-radius: var(--radius-md);
-          padding: 6px 10px;
-        }
-        .level-bar {
-          flex: 1; height: 4px; border-radius: 2px;
-          background: var(--surface-elevated); transition: all 0.08s ease;
-          align-self: flex-end;
-        }
-        .level-bar.level-low { background: var(--gradient-green); }
-        .level-bar.level-mid { background: var(--gradient-start); }
-        .level-bar.level-high { background: var(--error); }
-        .gl-level-value {
-          text-align: center; font-size: 13px; font-weight: 700;
-          color: var(--text-secondary); font-variant-numeric: tabular-nums;
-        }
-
-        /* GO LIVE Button */
-        .gl-broadcast-btn {
-          width: 100%; padding: 20px; border-radius: var(--radius-xl);
-          font-size: 20px; font-weight: 800; cursor: pointer; transition: all 0.3s ease;
-          display: flex; align-items: center; justify-content: center; gap: 12px;
-          border: none; letter-spacing: 1px;
-        }
-        .gl-broadcast-btn:active { transform: scale(0.97); }
-        .gl-broadcast-btn.start {
-          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-          color: #fff; box-shadow: var(--shadow-soft), 0 0 40px rgba(232,168,56,0.2);
-        }
-        .gl-broadcast-btn.end {
-          background: linear-gradient(135deg, var(--gradient-red), #DC2626);
-          color: #fff; box-shadow: 0 4px 24px rgba(239,68,68,0.35);
-          animation: pulseShadow 2s ease-in-out infinite;
-        }
-        .gl-broadcast-btn i { font-size: 22px; }
-
-        @keyframes pulseShadow {
-          0%, 100% { box-shadow: 0 4px 24px rgba(239,68,68,0.35); }
-          50% { box-shadow: 0 4px 40px rgba(239,68,68,0.55); }
-        }
-
-        /* Stream Quality */
-        .gl-quality-options {
-          display: flex; gap: 10px;
-        }
-        .gl-quality-btn {
-          flex: 1; padding: 12px; border-radius: var(--radius-md);
-          font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;
-          border: 1.5px solid var(--border); background: var(--surface-card);
-          color: var(--text-secondary); text-align: center;
-        }
-        .gl-quality-btn:active { transform: scale(0.96); }
-        .gl-quality-btn.active {
-          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-          border-color: transparent; color: #fff; box-shadow: var(--shadow-soft);
-        }
-        .gl-quality-btn:disabled { opacity: 0.5; }
-
-        /* Tech Info */
-        .gl-tech-info {
-          background: var(--surface-card); border: 1px solid var(--border);
-          border-radius: var(--radius-lg); padding: 16px;
-          display: flex; flex-direction: column; gap: 12px;
-          animation: fadeSlideUp 0.3s ease;
-        }
-        .gl-tech-row {
-          display: flex; align-items: center; justify-content: space-between;
-          font-size: 13px;
-        }
-        .gl-tech-row span:first-child { color: var(--text-tertiary); font-weight: 500; }
-        .gl-tech-value {
-          font-weight: 600; font-size: 12px;
-          color: var(--text-secondary); font-family: monospace;
-          max-width: 60%; text-align: right; word-break: break-all;
-        }
-
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
 
         /* ========== MEDIA LIBRARY SECTION ========== */
         .media-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
@@ -3823,135 +2463,6 @@ export default function AdminRadioPage() {
         .pl-picker-artist { font-size: 12px; color: var(--text-secondary); }
         .pl-picker-add { color: var(--primary); font-size: 20px; }
         .pl-picker-checked { color: var(--success); font-size: 18px; }
-        /* ========== DJ ACCOUNTS SECTION ========== */
-        .dj-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-        .dj-toolbar { display: flex; gap: 10px; }
-        .dj-list { display: flex; flex-direction: column; gap: 8px; }
-        .dj-card { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; transition: all 0.2s ease; }
-        .dj-card.expanded { border-color: rgba(232,168,56,0.2); }
-        .dj-card-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: background 0.2s ease; }
-        .dj-card-header:active { background: var(--surface-hover); }
-        .dj-avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border); flex-shrink: 0; }
-        .dj-card-info { flex: 1; min-width: 0; }
-        .dj-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-        .dj-live-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: rgba(239,68,68,0.1); border-radius: 10px; font-size: 10px; font-weight: 700; color: var(--error); text-transform: uppercase; }
-        .dj-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--error); animation: livePulse 1.5s ease-in-out infinite; }
-        .dj-card-username { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
-        .dj-card-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-        .dj-action-btn { width: 30px; height: 30px; border-radius: 50%; background: none; border: none; color: var(--text-tertiary); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .dj-action-btn:active { background: var(--surface-elevated); color: var(--text-primary); }
-        .dj-action-btn.danger:active { background: rgba(239,68,68,0.1); color: var(--error); }
-        .dj-edit-form { border-top: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-        .dj-history { border-top: 1px solid var(--border); padding: 12px 16px; }
-        .dj-history-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-        .dj-history-item { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 13px; }
-        .dj-history-date { color: var(--text-primary); font-weight: 500; flex: 1; }
-        .dj-history-time { color: var(--text-secondary); }
-        .dj-history-duration { color: var(--text-tertiary); font-weight: 500; }
-        /* ========== SCHEDULE SECTION ========== */
-        .sched-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-        .sched-header-info { display: flex; align-items: center; justify-content: space-between; }
-        .sched-header-info h3 { font-size: 16px; font-weight: 700; }
-        .sched-grid-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .sched-grid-wrapper::-webkit-scrollbar { display: none; }
-        .sched-grid { display: grid; grid-template-columns: 56px repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; min-width: 600px; }
-        .sched-time-header, .sched-day-header { background: var(--surface-card); padding: 8px 6px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
-        .sched-day-header.today { background: rgba(232,168,56,0.1); color: var(--primary); }
-        .sched-time-cell { background: var(--surface-card); padding: 4px 6px; font-size: 10px; color: var(--text-tertiary); font-weight: 500; text-align: right; display: flex; align-items: flex-start; justify-content: flex-end; }
-        .sched-cell { background: var(--surface-elevated); min-height: 28px; padding: 2px; position: relative; cursor: pointer; transition: background 0.15s ease; }
-        .sched-cell:hover { background: var(--surface-hover); }
-        .sched-cell.today { background: rgba(232,168,56,0.03); }
-        .sched-cell.has-block { padding: 1px; }
-        .sched-block { height: 100%; border-radius: 3px; padding: 2px 4px; font-size: 9px; font-weight: 700; color: #fff; display: flex; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-        .sched-empty-slot { width: 100%; height: 100%; }
-        .sched-now-line { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--error); border-radius: 1px; animation: livePulse 1.5s ease-in-out infinite; }
-        .sched-legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 0; }
-        .sched-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
-        .sched-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-        .sched-legend-name { font-weight: 500; }
-        .sched-modal-actions { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; }
-        .sched-delete-btn { padding: 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; background: rgba(239,68,68,0.1); color: var(--error); border: none; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; }
-        .sched-delete-btn:active { background: rgba(239,68,68,0.2); }
-        /* ========== ANALYTICS SECTION ========== */
-        .an-content { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-        .an-period-toggle { display: flex; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 4px; }
-        .an-period-btn { flex: 1; padding: 10px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; transition: all 0.2s ease; }
-        .an-period-btn.active { background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); color: #fff; box-shadow: var(--shadow-soft); }
-        .an-period-btn:not(.active):active { background: var(--surface-elevated); }
-        .an-stats-row { display: flex; gap: 12px; }
-        .an-stat-card { flex: 1; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; text-align: center; }
-        .an-stat-value { font-size: 32px; font-weight: 800; line-height: 1; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .an-stat-label { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-        .an-chart { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 12px 8px; }
-        .an-chart-bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
-        .an-chart-col { flex: 1; display: flex; align-items: flex-end; height: 100%; cursor: pointer; }
-        .an-chart-bar { width: 100%; border-radius: 3px 3px 0 0; background: linear-gradient(to top, rgba(232,168,56,0.3), var(--primary)); transition: height 0.3s ease; min-height: 2px; }
-        .an-chart-labels { display: flex; justify-content: space-between; margin-top: 8px; overflow-x: auto; gap: 2px; }
-        .an-chart-label { font-size: 9px; color: var(--text-tertiary); font-weight: 500; white-space: nowrap; }
-        .an-top-songs { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 0; }
-        .an-top-song { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
-        .an-top-song:last-child { border-bottom: none; }
-        .an-top-rank { width: 22px; text-align: center; font-size: 12px; font-weight: 700; color: var(--text-tertiary); flex-shrink: 0; }
-        .an-top-info { flex: 1; min-width: 0; }
-        .an-top-title { font-size: 13px; font-weight: 600; }
-        .an-top-artist { font-size: 11px; color: var(--text-secondary); }
-        .an-top-bar-wrapper { width: 80px; height: 6px; background: var(--surface-elevated); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-        .an-top-bar { height: 100%; background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end)); border-radius: 3px; transition: width 0.5s ease; }
-        .an-top-plays { font-size: 12px; font-weight: 700; color: var(--text-secondary); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-        /* ========== WEBHOOKS SECTION ========== */
-        .wh-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-        .wh-events-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-        .wh-event-chip { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-        .wh-event-chip input { display: none; }
-        .wh-event-label { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1.5px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; transition: all 0.2s ease; }
-        .wh-event-label:active { transform: scale(0.95); }
-        .wh-event-label.checked { background: var(--primary); border-color: var(--primary); color: #fff; }
-        .wh-list { display: flex; flex-direction: column; gap: 8px; }
-        .wh-card { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; transition: all 0.2s ease; }
-        .wh-card.disabled { opacity: 0.5; }
-        .wh-card-top { display: flex; align-items: center; gap: 12px; }
-        .wh-card-url { flex: 1; font-size: 13px; font-weight: 500; font-family: monospace; color: var(--text-secondary); word-break: break-all; }
-        .wh-card-events { display: flex; flex-wrap: wrap; gap: 4px; }
-        .wh-event-tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(232,168,56,0.1); color: var(--primary); }
-        .wh-card-actions { display: flex; gap: 8px; }
-        .wh-test-btn { padding: 7px 14px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; transition: all 0.2s ease; }
-        .wh-test-btn:active { background: var(--surface-elevated); }
-        .wh-delete-btn { padding: 7px 14px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: rgba(239,68,68,0.1); color: var(--error); display: flex; align-items: center; gap: 5px; transition: all 0.2s ease; }
-        .wh-delete-btn:active { background: rgba(239,68,68,0.2); }
-        .wh-secret-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-tertiary); padding-top: 6px; border-top: 1px solid var(--border); }
-        /* ========== SETTINGS SECTION ========== */
-        .st-content { padding: 16px; display: flex; flex-direction: column; gap: 18px; }
-        .st-section { display: flex; flex-direction: column; gap: 8px; }
-        .st-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-        .st-copy-row { display: flex; gap: 8px; align-items: center; }
-        .st-copy-input { flex: 1; }
-        .st-copy-btn { width: 44px; height: 44px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--surface-card); color: var(--text-secondary); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s ease; }
-        .st-copy-btn:active { background: var(--surface-elevated); border-color: var(--primary); color: var(--primary); }
-        .st-toggle-row { display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-        .st-toggle-info { flex: 1; }
-        .st-toggle-title { font-size: 14px; font-weight: 600; }
-        .st-toggle-desc { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
-        .st-mount-list { display: flex; flex-direction: column; gap: 4px; }
-        .st-mount-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface-elevated); border-radius: var(--radius-sm); }
-        .st-mount-info { display: flex; align-items: center; gap: 10px; }
-        .st-mount-path { font-size: 14px; font-weight: 500; font-family: monospace; }
-        .st-mount-type { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
-        .st-mount-type.stream { background: rgba(59,130,246,0.1); color: #3B82F6; }
-        .st-mount-type.live { background: rgba(239,68,68,0.1); color: var(--error); }
-        .st-mount-type.mobile { background: rgba(139,92,246,0.1); color: #8B5CF6; }
-        .st-mount-listeners { font-size: 12px; color: var(--text-tertiary); }
-        .st-danger { background: rgba(239,68,68,0.04); border: 1px solid rgba(239,68,68,0.15); border-radius: var(--radius-lg); padding: 18px; display: flex; flex-direction: column; gap: 10px; }
-        .st-danger-title { font-size: 16px; font-weight: 700; color: var(--error); }
-        .st-danger p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
-        .st-danger-btn { padding: 12px 20px; border-radius: var(--radius-md); border: 1.5px solid rgba(239,68,68,0.3); background: transparent; color: var(--error); font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; align-self: flex-start; }
-        .st-danger-btn:active { background: rgba(239,68,68,0.1); }
-        .st-loading { text-align: center; padding: 40px 0; color: var(--text-tertiary); }
-        .st-error-banner { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--error); display: flex; align-items: center; gap: 8px; }
-        .st-success-banner { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--success); display: flex; align-items: center; gap: 8px; }
-        .st-mount-empty { padding: 16px 0; font-size: 13px; color: var(--text-tertiary); text-align: center; }
-        .st-save-btn { padding: 12px 24px; border-radius: var(--radius-md); border: none; background: var(--primary); color: white; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; align-self: flex-start; }
-        .st-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .st-save-btn:active:not(:disabled) { opacity: 0.9; }
 
         /* ========== NEW PLAYLISTS SECTION ========== */
         .pl-content-new { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
@@ -4127,8 +2638,8 @@ export default function AdminRadioPage() {
         <header className="radio-header">
           <div className="radio-header-logo"><i className="fas fa-tower-broadcast"></i></div>
           <div className="radio-header-info">
-            <div className="radio-header-name">Kingdom Seekers Radio</div>
-            <div className="radio-header-sub">Kingdom Seekers Church Radio Station</div>
+            <div className="radio-header-name">Turningpoint Radio</div>
+            <div className="radio-header-sub">Turningpoint Church Nakuru Radio Station</div>
           </div>
           <div className="radio-header-right">
             <div className={`on-air-badge ${isLive ? "live" : "off"}`}>

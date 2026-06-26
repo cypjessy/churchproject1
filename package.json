@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:apk": "bash build-apk.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -29,7 +30,7 @@
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
-    "capacitor-music-controls-plugin": "^6.1.0",
+    "@jofr/capacitor-media-session": "^4.0.0",
     "capacitor-native-biometric": "^4.2.2",
     "firebase": "^12.15.0",
     "next": "16.2.9",
